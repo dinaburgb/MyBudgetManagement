@@ -55,7 +55,7 @@ test('inserts new transactions', () => {
   assert.strictEqual(count, 2)
 })
 
-test('skips duplicates on second run (by identifier)', () => {
+test('skips duplicates on second run (same content)', () => {
   const db = freshDb()
   const data = { accountNumber: '123', txns: [txn({ identifier: 'A1' })] }
   saveAccountTransactions(account, data, db)
@@ -64,6 +64,36 @@ test('skips duplicates on second run (by identifier)', () => {
   assert.strictEqual(stats.skipped, 1)
   const count = db.prepare('SELECT COUNT(*) c FROM transactions').get().c
   assert.strictEqual(count, 1)  // no duplicate
+})
+
+test('recurring payments sharing a bank id are kept separate (FIBI bug)', () => {
+  // FIBI reuses the same "reference" for every payment to the same payee.
+  // Different date+amount means different real transactions — keep them all.
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ identifier: '64280', date: '2026-04-30T00:00:00.000Z', chargedAmount: 1609.35, description: 'Harel pension' }),
+    txn({ identifier: '64280', date: '2026-05-31T00:00:00.000Z', chargedAmount: 1608.61, description: 'Harel pension' }),
+    txn({ identifier: '64280', date: '2026-06-30T00:00:00.000Z', chargedAmount: 1610.00, description: 'Harel pension' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 3)
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 3)
+})
+
+test('truly identical transactions in one import are both kept (occurrence index)', () => {
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ identifier: undefined, date: '2026-06-01T00:00:00.000Z', chargedAmount: -20, description: 'BUS' }),
+    txn({ identifier: undefined, date: '2026-06-01T00:00:00.000Z', chargedAmount: -20, description: 'BUS' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 2)  // two identical bus rides — keep both
+  // Re-import the same two — should dedup, not duplicate
+  const again = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ identifier: undefined, date: '2026-06-01T00:00:00.000Z', chargedAmount: -20, description: 'BUS' }),
+    txn({ identifier: undefined, date: '2026-06-01T00:00:00.000Z', chargedAmount: -20, description: 'BUS' }),
+  ] }, db)
+  assert.strictEqual(again.inserted, 0)
+  assert.strictEqual(again.skipped, 2)
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 2)
 })
 
 test('dedups by content hash when no identifier', () => {

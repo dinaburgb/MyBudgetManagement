@@ -26,20 +26,25 @@ function normalizeDescription(desc) {
 }
 
 /**
- * Build a stable deduplication key for a transaction.
- * Prefers the bank's own identifier; falls back to a content hash.
+ * Compute a content hash for a transaction from its distinguishing fields.
+ *
+ * We do NOT use the bank's own identifier as the key: some banks (e.g. FIBI)
+ * reuse the same "reference" number for every payment to the same payee, so it
+ * is a payee code, not a per-transaction id. Hashing the actual content
+ * (date + amount + description + currency) distinguishes recurring payments
+ * correctly, and stays stable across re-imports and pending→completed changes.
+ *
+ * Exported so the one-time migration can recompute keys for existing rows
+ * using exactly the same logic.
  */
-function buildDedupKey(source, accountNumber, txn) {
-  if (txn.identifier !== undefined && txn.identifier !== null && txn.identifier !== '') {
-    return `${source}:${accountNumber}:${txn.identifier}`
-  }
+export function computeContentHash(source, accountNumber, dateYMD, amount, description, currency) {
   const parts = [
     source,
-    accountNumber,
-    txn.date,
-    txn.chargedAmount,
-    normalizeDescription(txn.description),
-    txn.originalCurrency || 'ILS',
+    accountNumber || '',
+    (dateYMD || '').slice(0, 10),
+    Number(amount).toFixed(2),            // stable numeric representation
+    normalizeDescription(description),
+    currency || 'ILS',
   ].join('|')
   return crypto.createHash('sha256').update(parts).digest('hex')
 }
@@ -91,12 +96,25 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
 
   let inserted = 0, updated = 0, skipped = 0
 
+  // Track how many times each content hash appears within THIS import, so that
+  // genuinely identical transactions on the same day (same amount/description)
+  // are kept as separate rows instead of being collapsed into one. The Nth
+  // occurrence gets suffix ":N". Re-imports produce the same sequence, so they
+  // still dedup correctly.
+  const occurrence = new Map()
+
   // Wrap in a transaction for speed and atomicity.
   // node:sqlite has no .transaction() helper, so we use explicit BEGIN/COMMIT.
   db.exec('BEGIN')
   try {
     for (const txn of txns) {
-      const dedupKey = buildDedupKey(account.source, accountNumber, txn)
+      const baseHash = computeContentHash(
+        account.source, accountNumber, txn.date, txn.chargedAmount,
+        txn.description, txn.originalCurrency,
+      )
+      const occ = occurrence.get(baseHash) || 0
+      occurrence.set(baseHash, occ + 1)
+      const dedupKey = `${baseHash}:${occ}`
       const existing = findStmt.get(dedupKey)
 
       const row = {
