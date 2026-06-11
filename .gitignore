@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+data/*.sqlite
+data/*.db
+data/*.sqlite3
+data/credentials.enc
+data/*.log
+*.local
