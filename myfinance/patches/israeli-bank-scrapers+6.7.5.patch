@@ -1,0 +1,41 @@
+diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js b/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
+index 630d930..4f41559 100644
+--- a/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
++++ b/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
+@@ -85,12 +85,33 @@ async function navigateOrErrorLabel(page) {
+   } catch (e) {
+     await (0, _elementsInteractions.waitUntilElementFound)(page, '#general-error', false, 100);
+   }
++  // PATCH: Discount is a single-page app — after the initial navigation it keeps
++  // routing client-side to the homepage (shows a loading spinner). Wait until the
++  // URL settles on the homepage, or on the login/error/change-password page,
++  // before the caller reads the URL. Otherwise the URL check fires too early and
++  // returns UNKNOWN_ERROR. See server/scrapers/scraper.js for context.
++  try {
++    await page.waitForFunction(() => {
++      const u = window.location.href;
++      // Match any post-login app version: retail, retail2, retail3, ...
++      return /\/apollo\/retail\d*\//.test(u)
++          || u.indexOf('MY_ACCOUNT_HOMEPAGE') !== -1
++          || u.indexOf('LOGIN_PAGE') !== -1
++          || u.indexOf('PWD_RENEW') !== -1
++          || !!document.querySelector('#general-error');
++    }, { timeout: 40000, polling: 500 });
++  } catch (e) {
++    // If it never settles, fall through — the URL check will report the result.
++  }
+ }
+ function getPossibleLoginResults() {
+   const urls = {};
+-  urls[_baseScraperWithBrowser.LoginResults.Success] = [`${BASE_URL}/apollo/retail/#/MY_ACCOUNT_HOMEPAGE`, `${BASE_URL}/apollo/retail2/#/MY_ACCOUNT_HOMEPAGE`, `${BASE_URL}/apollo/retail2/`];
+-  urls[_baseScraperWithBrowser.LoginResults.InvalidPassword] = [`${BASE_URL}/apollo/core/templates/lobby/masterPage.html#/LOGIN_PAGE`];
+-  urls[_baseScraperWithBrowser.LoginResults.ChangePassword] = [`${BASE_URL}/apollo/core/templates/lobby/masterPage.html#/PWD_RENEW`];
++  // PATCH: Discount keeps bumping the app path (retail -> retail2 -> retail3 -> ...).
++  // Use a regex so any future version still counts as a successful login,
++  // instead of hard-coding exact URLs that break on every site upgrade.
++  urls[_baseScraperWithBrowser.LoginResults.Success] = [/\/apollo\/retail\d*\//i];
++  urls[_baseScraperWithBrowser.LoginResults.InvalidPassword] = [/LOGIN_PAGE/i];
++  urls[_baseScraperWithBrowser.LoginResults.ChangePassword] = [/PWD_RENEW/i];
+   return urls;
+ }
+ function createLoginFields(credentials) {

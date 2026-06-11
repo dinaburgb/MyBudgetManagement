@@ -202,6 +202,8 @@ export default function AccountsPage() {
       setSyncMsg({
         id: acc.id, ok: true,
         text: `Done — ${s.inserted} new, ${s.updated} updated, ${s.skipped} unchanged`,
+        accountsCount: s.accountsCount,
+        breakdown: s.breakdown || [],
       })
       load()
     } catch (err) {
@@ -299,7 +301,23 @@ export default function AccountsPage() {
                 <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${
                   syncMsg.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
                 }`}>
-                  {syncMsg.text}
+                  <div>{syncMsg.text}</div>
+                  {/* Per-account breakdown so you can confirm every account synced */}
+                  {syncMsg.ok && syncMsg.accountsCount > 0 && (
+                    <div className="mt-2 text-gray-400">
+                      <div className="text-gray-300 font-medium">
+                        {syncMsg.accountsCount} account{syncMsg.accountsCount > 1 ? 's' : ''} under this login:
+                      </div>
+                      <ul className="mt-1 space-y-0.5">
+                        {syncMsg.breakdown.map(b => (
+                          <li key={b.accountNumber} className="font-mono text-xs">
+                            • {b.accountNumber} — {b.total} transactions
+                            {b.inserted > 0 && <span className="text-green-400"> ({b.inserted} new)</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

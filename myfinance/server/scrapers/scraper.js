@@ -11,9 +11,14 @@
  */
 
 import { createRequire } from 'node:module'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { decrypt } from '../crypto/encryption.js'
 import { getDb, backupDatabase, logActivity } from '../db/database.js'
 import { saveAccountTransactions } from '../db/save-transactions.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const LOGS_DIR = path.join(__dirname, '..', '..', 'logs')
 
 // israeli-bank-scrapers is a CommonJS package — load it via require
 const require = createRequire(import.meta.url)
@@ -76,9 +81,16 @@ export async function scrapeAccount(account) {
     companyId,
     startDate,
     combineInstallments: false,
-    showBrowser: false,       // headless — no window pops up
+    // Show the real browser window by default. Israeli bank sites (esp. Discount)
+    // often behave differently or block headless browsers, returning UNKNOWN_ERROR.
+    // Set SHOW_BROWSER=false in the environment to run headless once it's stable.
+    showBrowser: process.env.SHOW_BROWSER !== 'false',
+    verbose: true,            // extra library logging to the server console
     timeout: 120000,          // 2 minutes per scrape
     defaultTimeout: 60000,
+    // On failure, save a screenshot of the page so we can see what went wrong
+    // (wrong page, OTP prompt, error message, etc.)
+    storeFailureScreenShotPath: path.join(LOGS_DIR, `scrape-failure-${account.source}.png`),
   }
 
   let result
@@ -86,6 +98,8 @@ export async function scrapeAccount(account) {
     const scraper = createScraper(options)
     result = await scraper.scrape(credentials)
   } catch (err) {
+    // Log the technical error to the server console for debugging (no credentials here)
+    console.error(`[scrape] ${account.source} exception:`, err.message)
     logActivity('scrape_error', account.source, 'exception during scrape')
     return { success: false, errorType: 'EXCEPTION', errorMessage: err.message }
   } finally {
@@ -94,6 +108,7 @@ export async function scrapeAccount(account) {
   }
 
   if (!result.success) {
+    console.error(`[scrape] ${account.source} failed:`, result.errorType, '-', result.errorMessage)
     logActivity('scrape_error', account.source, result.errorType || 'unknown')
     return result
   }
@@ -101,14 +116,23 @@ export async function scrapeAccount(account) {
   // Back up the DB before writing any imported data
   backupDatabase()
 
-  // Save every account returned (a card login can return several cards)
+  // Save every account returned. One bank/card login can return several
+  // accounts or cards — we save them all and report a per-account breakdown.
   const stats = { inserted: 0, updated: 0, skipped: 0 }
+  const breakdown = []
   for (const scrapedAccount of result.accounts || []) {
     const s = saveAccountTransactions(account, scrapedAccount)
     stats.inserted += s.inserted
     stats.updated  += s.updated
     stats.skipped  += s.skipped
+    breakdown.push({
+      accountNumber: scrapedAccount.accountNumber,
+      total: (scrapedAccount.txns || []).length,
+      ...s,
+    })
   }
+  stats.accountsCount = breakdown.length
+  stats.breakdown = breakdown
 
   // Mark this account as successfully scraped now
   getDb().prepare(
