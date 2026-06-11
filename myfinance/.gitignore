@@ -7,3 +7,17 @@ data/sentinel.enc
 data/credentials.enc
 logs/
 .env
+# Extra safety for local financial data and secrets
+data/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.enc
+*.bin
+*.key
+*.pem
+credentials*
+cookies*
+tokens*
+*.log
