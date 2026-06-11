@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2 } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw } from 'lucide-react'
 import axios from 'axios'
 
 const SOURCES = [
@@ -189,6 +189,31 @@ export default function AccountsPage() {
     load()
   }
 
+  // Which account is currently syncing, and the last result message
+  const [syncingId, setSyncingId] = useState(null)
+  const [syncMsg, setSyncMsg]     = useState(null)  // { id, text, ok }
+
+  async function handleSync(acc) {
+    setSyncingId(acc.id)
+    setSyncMsg(null)
+    try {
+      const res = await axios.post(`/api/scrape/account/${acc.id}`)
+      const s = res.data.stats || {}
+      setSyncMsg({
+        id: acc.id, ok: true,
+        text: `Done — ${s.inserted} new, ${s.updated} updated, ${s.skipped} unchanged`,
+      })
+      load()
+    } catch (err) {
+      setSyncMsg({
+        id: acc.id, ok: false,
+        text: err.response?.data?.error || 'Sync failed',
+      })
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
   if (loading) return <div className="text-gray-400">Loading accounts...</div>
 
   return (
@@ -226,37 +251,57 @@ export default function AccountsPage() {
           {accounts.map(acc => (
             <div
               key={acc.id}
-              className="bg-gray-900 rounded-xl p-4 flex items-center justify-between"
+              className="bg-gray-900 rounded-xl p-4"
             >
-              <div>
-                <div className="font-medium text-white">{acc.name}</div>
-                <div className="text-sm text-gray-400 mt-0.5">
-                  {SOURCE_LABELS[acc.source]} · {acc.owner}
-                  {acc.last_scraped && (
-                    <span className="ml-3 text-gray-500">
-                      Last synced: {new Date(acc.last_scraped).toLocaleDateString()}
-                    </span>
-                  )}
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-white">{acc.name}</div>
+                  <div className="text-sm text-gray-400 mt-0.5">
+                    {SOURCE_LABELS[acc.source]} · {acc.owner}
+                    {acc.last_scraped && (
+                      <span className="ml-3 text-gray-500">
+                        Last synced: {new Date(acc.last_scraped).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {acc.enabled
+                    ? <CheckCircle className="w-4 h-4 text-green-500" />
+                    : <XCircle className="w-4 h-4 text-gray-600" />
+                  }
+                  {/* Update / sync button */}
+                  <button
+                    onClick={() => handleSync(acc)}
+                    disabled={syncingId === acc.id}
+                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${syncingId === acc.id ? 'animate-spin' : ''}`} />
+                    {syncingId === acc.id ? 'Syncing...' : 'Update'}
+                  </button>
+                  <button
+                    onClick={() => { setEditing(acc); setShowForm(false) }}
+                    className="text-gray-400 hover:text-white transition-colors"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(acc.id)}
+                    className="text-gray-400 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {acc.enabled
-                  ? <CheckCircle className="w-4 h-4 text-green-500" />
-                  : <XCircle className="w-4 h-4 text-gray-600" />
-                }
-                <button
-                  onClick={() => { setEditing(acc); setShowForm(false) }}
-                  className="text-gray-400 hover:text-white transition-colors"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(acc.id)}
-                  className="text-gray-400 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+
+              {/* Sync result message for this account */}
+              {syncMsg?.id === acc.id && (
+                <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${
+                  syncMsg.ok ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                }`}>
+                  {syncMsg.text}
+                </div>
+              )}
             </div>
           ))}
         </div>
