@@ -86,8 +86,10 @@ export async function scrapeAccount(account) {
     // Set SHOW_BROWSER=false in the environment to run headless once it's stable.
     showBrowser: process.env.SHOW_BROWSER !== 'false',
     verbose: true,            // extra library logging to the server console
-    timeout: 120000,          // 2 minutes per scrape
-    defaultTimeout: 60000,
+    // Generous timeout: some banks (e.g. Hapoalim) require an SMS/OTP code that the
+    // user types manually in the visible browser — give them time before aborting.
+    timeout: 360000,          // 6 minutes per scrape
+    defaultTimeout: 90000,
     // On failure, save a screenshot of the page so we can see what went wrong
     // (wrong page, OTP prompt, error message, etc.)
     storeFailureScreenShotPath: path.join(LOGS_DIR, `scrape-failure-${account.source}.png`),

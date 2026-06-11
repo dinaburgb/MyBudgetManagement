@@ -30,10 +30,18 @@ const CREDENTIAL_FIELDS = {
   max:       [{ key: 'username',  label: 'Username'  }, { key: 'password', label: 'Password', secret: true }],
 }
 
+const PRESET_OWNERS = ['Boris', 'Irena', 'Joint']
+
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
   const [source, setSource] = useState(initial?.source || 'hapoalim')
-  const [owner,  setOwner]  = useState(initial?.owner  || 'Boris')
+  // Owner can be a preset (Boris/Irena/Joint) or a custom name via "Other".
+  const initialOwner = initial?.owner || 'Boris'
+  const initialIsPreset = PRESET_OWNERS.includes(initialOwner)
+  const [ownerSelect, setOwnerSelect] = useState(initialIsPreset ? initialOwner : 'Other')
+  const [customOwner, setCustomOwner] = useState(initialIsPreset ? '' : initialOwner)
+  // The effective owner value that gets saved
+  const owner = ownerSelect === 'Other' ? customOwner.trim() : ownerSelect
   const [creds,  setCreds]  = useState({})
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
@@ -43,6 +51,12 @@ function AccountForm({ initial, onSave, onCancel }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+
+    // Validate custom owner name when "Other" is selected
+    if (ownerSelect === 'Other' && !customOwner.trim()) {
+      setError('Please enter the owner name')
+      return
+    }
 
     // Validate all credential fields are filled
     for (const f of fields) {
@@ -109,14 +123,25 @@ function AccountForm({ initial, onSave, onCancel }) {
       <div>
         <label className="block text-sm text-gray-400 mb-1">Owner</label>
         <select
-          value={owner}
-          onChange={e => setOwner(e.target.value)}
+          value={ownerSelect}
+          onChange={e => setOwnerSelect(e.target.value)}
           className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
         >
           <option value="Boris">Boris</option>
           <option value="Irena">Irena</option>
           <option value="Joint">Joint</option>
+          <option value="Other">Other…</option>
         </select>
+        {/* Custom owner name field, shown only when "Other" is selected */}
+        {ownerSelect === 'Other' && (
+          <input
+            type="text"
+            value={customOwner}
+            onChange={e => setCustomOwner(e.target.value)}
+            placeholder="Enter owner name"
+            className="w-full mt-2 bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+          />
+        )}
       </div>
 
       {/* Credential fields */}
