@@ -5,7 +5,7 @@
 
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
-import { encrypt, decrypt, isUnlocked } from '../crypto/encryption.js'
+import { encrypt, isUnlocked } from '../crypto/encryption.js'
 
 const router = Router()
 
@@ -87,20 +87,8 @@ router.delete('/:id', (req, res) => {
   res.json({ message: 'Account deleted' })
 })
 
-/**
- * GET /api/accounts/:id/credentials — return decrypted credentials.
- * Only used internally by the scraper; not exposed in the UI directly.
- */
-router.get('/:id/credentials', (req, res) => {
-  const db = getDb()
-  const account = db.prepare(`SELECT credentials FROM accounts WHERE id = ?`).get(req.params.id)
-  if (!account) return res.status(404).json({ error: 'Account not found' })
-  try {
-    const plain = decrypt(account.credentials)
-    res.json(JSON.parse(plain))
-  } catch {
-    res.status(500).json({ error: 'Failed to decrypt credentials' })
-  }
-})
+// NOTE: There is deliberately NO endpoint that returns decrypted credentials.
+// The scraper decrypts them in memory on the server side (see scrapers/scraper.js).
+// Never expose plaintext credentials over HTTP.
 
 export default router

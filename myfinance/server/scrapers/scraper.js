@@ -91,7 +91,10 @@ export async function scrapeAccount(account) {
     timeout: 360000,          // 6 minutes per scrape
     defaultTimeout: 90000,
     // On failure, save a screenshot of the page so we can see what went wrong
-    // (wrong page, OTP prompt, error message, etc.)
+    // (wrong page, OTP prompt, error message, etc.).
+    // PRIVACY: this image is of the live bank page and may show the username/account
+    // on screen. It is written ONLY to the git-ignored logs/ folder. Do not commit
+    // logs/, and clear these screenshots when you no longer need them for debugging.
     storeFailureScreenShotPath: path.join(LOGS_DIR, `scrape-failure-${account.source}.png`),
   }
 

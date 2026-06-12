@@ -48,10 +48,13 @@ CREATE TABLE IF NOT EXISTS transactions (
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Index for fast date-range queries
-CREATE INDEX IF NOT EXISTS idx_transactions_date   ON transactions(date);
-CREATE INDEX IF NOT EXISTS idx_transactions_source ON transactions(source);
-CREATE INDEX IF NOT EXISTS idx_transactions_owner  ON transactions(owner);
+-- Indexes for fast filtering. dedup_key already has a unique index from its
+-- UNIQUE constraint above.
+CREATE INDEX IF NOT EXISTS idx_transactions_date     ON transactions(date);
+CREATE INDEX IF NOT EXISTS idx_transactions_source   ON transactions(source);
+CREATE INDEX IF NOT EXISTS idx_transactions_owner    ON transactions(owner);
+CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
+CREATE INDEX IF NOT EXISTS idx_transactions_account  ON transactions(account_id);
 
 -- Auto-categorization rules: if description contains keyword → assign category
 CREATE TABLE IF NOT EXISTS category_rules (

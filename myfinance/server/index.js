@@ -99,7 +99,10 @@ export function broadcastOtpRequest(accountName) {
 
 // --- Start ---
 const PORT = 3000
-server.listen(PORT, () => {
+// Bind to loopback only (127.0.0.1) so the app is reachable ONLY from this
+// machine, never from other devices on the local network/Wi-Fi.
+const HOST = '127.0.0.1'
+server.listen(PORT, HOST, () => {
   console.log(`\n✅ MyFinance is running at http://localhost:${PORT}`)
   console.log(`   Open your browser and go to: http://localhost:${PORT}\n`)
 })

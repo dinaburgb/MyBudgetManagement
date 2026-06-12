@@ -1,10 +1,28 @@
+# Dependencies & build output
 node_modules/
 dist/
+client/dist/
+
+# Environment
 .env
 .env.*
-data/*.sqlite
-data/*.db
-data/*.sqlite3
-data/credentials.enc
-data/*.log
 *.local
+
+# Local financial data, databases and secrets (defense in depth — also covered
+# by myfinance/.gitignore). NEVER commit any of these.
+data/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+*.enc
+*.bin
+*.key
+*.pem
+credentials*
+cookies*
+tokens*
+*.log
+
+# Personal prompt doc — kept locally but not tracked (contains personal profile)
+docs/INSTRUCTIONS.md
