@@ -21,7 +21,7 @@ router.use((req, res, next) => {
 router.get('/', (req, res) => {
   const db = getDb()
   const accounts = db.prepare(`
-    SELECT id, name, source, owner, last_scraped, enabled, created_at
+    SELECT id, name, source, owner, last_scraped, enabled, include_in_totals, created_at
     FROM accounts ORDER BY source, owner
   `).all()
   res.json(accounts)
@@ -65,6 +65,9 @@ router.put('/:id', (req, res) => {
   if (source    !== undefined) { updates.push('source = ?');  values.push(source) }
   if (owner     !== undefined) { updates.push('owner = ?');   values.push(owner) }
   if (enabled   !== undefined) { updates.push('enabled = ?'); values.push(enabled ? 1 : 0) }
+  if (req.body.include_in_totals !== undefined) {
+    updates.push('include_in_totals = ?'); values.push(req.body.include_in_totals ? 1 : 0)
+  }
   if (credentials !== undefined) {
     try { JSON.parse(credentials) } catch {
       return res.status(400).json({ error: 'credentials must be valid JSON' })

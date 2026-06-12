@@ -1,0 +1,244 @@
+/**
+ * Auto-categorization engine.
+ *
+ * A category rule maps a keyword to a category. When a transaction's description
+ * contains the keyword (case-insensitive substring match), the transaction gets
+ * that category. Rules are checked from highest priority to lowest; the first
+ * match wins. Descriptions and keywords are compared in lowercase.
+ *
+ * The rules live in the `category_rules` table (see schema.js). This module
+ * loads them, applies them to a description, seeds a useful default set on first
+ * run, and can re-categorize existing transactions on demand.
+ */
+
+import { getDb } from './database.js'
+
+/**
+ * Default rules seeded on first run. Keywords cover common Israeli merchants and
+ * services, in both Hebrew and English (cards often return Latin-letter names).
+ * Keywords are matched as lowercased substrings of the description.
+ *
+ * The user can add, edit, or delete these later from the Categories page —
+ * they are only a starting point.
+ */
+export const DEFAULT_RULES = [
+  // Groceries / supermarkets
+  ['שופרסל', 'Groceries'], ['shufersal', 'Groceries'], ['supersol', 'Groceries'],
+  ['רמי לוי', 'Groceries'], ['rami levy', 'Groceries'], ['ויקטורי', 'Groceries'],
+  ['יוחננוף', 'Groceries'], ['אושר עד', 'Groceries'], ['טיב טעם', 'Groceries'],
+  ['יינות ביתן', 'Groceries'], ['מגה', 'Groceries'], ['סטופ מרקט', 'Groceries'],
+  // Restaurants / cafes / food delivery
+  ['מסעדה', 'Restaurants'], ['קפה', 'Restaurants'], ['cafe', 'Restaurants'],
+  ['ארומה', 'Restaurants'], ['aroma', 'Restaurants'], ['רולדין', 'Restaurants'],
+  ['מקדונלד', 'Restaurants'], ['mcdonald', 'Restaurants'], ['בורגר', 'Restaurants'],
+  ['פיצה', 'Restaurants'], ['pizza', 'Restaurants'], ['wolt', 'Restaurants'],
+  ['וולט', 'Restaurants'], ['10bis', 'Restaurants'], ['תן ביס', 'Restaurants'],
+  // Fuel
+  ['פז', 'Fuel'], ['paz', 'Fuel'], ['דלק', 'Fuel'], ['delek', 'Fuel'],
+  ['סונול', 'Fuel'], ['sonol', 'Fuel'], ['דור אלון', 'Fuel'], ['ten', 'Fuel'],
+  // Transport
+  ['רכבת', 'Transport'], ['אגד', 'Transport'], ['רב קו', 'Transport'],
+  ['רב-קו', 'Transport'], ['מטרופולין', 'Transport'], ['פנגו', 'Transport'],
+  ['pango', 'Transport'], ['cellopark', 'Transport'], ['סלופארק', 'Transport'],
+  // Healthcare / pharmacy
+  ['סופר פארם', 'Healthcare'], ['super-pharm', 'Healthcare'], ['superpharm', 'Healthcare'],
+  ['מכבי', 'Healthcare'], ['כללית', 'Healthcare'], ['clalit', 'Healthcare'],
+  ['מאוחדת', 'Healthcare'], ['לאומית', 'Healthcare'], ['בית מרקחת', 'Healthcare'],
+  // Utilities
+  ['חברת חשמל', 'Utilities'], ['חשמל', 'Utilities'], ['מקורות', 'Utilities'],
+  ['ארנונה', 'Utilities'], ['עיריית', 'Utilities'], ['גז', 'Utilities'],
+  // Communications
+  ['פרטנר', 'Communications'], ['partner', 'Communications'], ['סלקום', 'Communications'],
+  ['cellcom', 'Communications'], ['בזק', 'Communications'], ['bezeq', 'Communications'],
+  ['hot', 'Communications'], ['הוט', 'Communications'], ['פלאפון', 'Communications'],
+  ['pelephone', 'Communications'], ['גולן', 'Communications'], ['yes', 'Communications'],
+  // Shopping
+  ['זארה', 'Shopping'], ['zara', 'Shopping'], ['קסטרו', 'Shopping'], ['castro', 'Shopping'],
+  ['fox', 'Shopping'], ['פוקס', 'Shopping'], ['ikea', 'Shopping'], ['איקאה', 'Shopping'],
+  ['amazon', 'Shopping'], ['אמזון', 'Shopping'], ['aliexpress', 'Shopping'], ['ace', 'Shopping'],
+  // Entertainment / subscriptions
+  ['סינמה', 'Entertainment'], ['cinema', 'Entertainment'], ['יס פלאנט', 'Entertainment'],
+  ['netflix', 'Entertainment'], ['נטפליקס', 'Entertainment'], ['spotify', 'Entertainment'],
+  ['ספוטיפיי', 'Entertainment'], ['steam', 'Entertainment'], ['youtube', 'Entertainment'],
+  // Travel
+  ['el al', 'Travel'], ['אל על', 'Travel'], ['booking', 'Travel'], ['airbnb', 'Travel'],
+  ['מלון', 'Travel'], ['hotel', 'Travel'], ['טיסה', 'Travel'],
+  // ATM
+  ['משיכת מזומן', 'ATM'], ['כספומט', 'ATM'], ['atm', 'ATM'],
+  // Transfers / payments
+  ['העברה', 'Transfers'], ['העברת', 'Transfers'], ['paybox', 'Transfers'],
+  ['פייבוקס', 'Transfers'], ['bit', 'Transfers'], ['ביט', 'Transfers'],
+]
+
+/**
+ * The single canonical set of categories — all in Hebrew. Everything in the app
+ * (rules, the manual category picker, filters, summaries) uses these values.
+ * Keep client/src/categories.js in sync with this list.
+ */
+export const CATEGORIES_HE = [
+  'מזון', 'מסעדות', 'תחבורה', 'דלק', 'בריאות', 'חשבונות בית',
+  'תקשורת', 'קניות', 'בידור', 'חינוך', 'נסיעות', 'ביטוח ופיננסים',
+  'משיכת מזומן', 'העברות', 'אחר',
+]
+
+/** The catch-all category, used when nothing else matches. */
+export const OTHER_CATEGORY = 'אחר'
+
+/**
+ * Maps any legacy or source-provided category value onto a canonical Hebrew
+ * category. Two kinds of keys live here:
+ *   1. The old English names we used before going Hebrew.
+ *   2. The Hebrew taxonomy the scrapers (esp. Visa Cal) return, which is more
+ *      granular and uneven — we fold it into our cleaner list.
+ * Anything not listed passes through unchanged (already-canonical values map to
+ * themselves), so this is safe to run repeatedly.
+ */
+export const CATEGORY_NORMALIZE = {
+  // --- legacy English ---
+  Groceries: 'מזון', Restaurants: 'מסעדות', Transport: 'תחבורה', Fuel: 'דלק',
+  Healthcare: 'בריאות', Utilities: 'חשבונות בית', Communications: 'תקשורת',
+  Shopping: 'קניות', Entertainment: 'בידור', Education: 'חינוך', Travel: 'נסיעות',
+  ATM: 'משיכת מזומן', Transfers: 'העברות', Other: 'אחר',
+  // --- Visa Cal / scraper Hebrew taxonomy ---
+  'מזון ומשקאות': 'מזון',
+  'מסעדות ובתי קפה': 'מסעדות',
+  'רכב ותחבורה': 'תחבורה',
+  'אנרגיה': 'דלק',
+  'רפואה ובריאות': 'בריאות',
+  'תקשורת ומחשבים': 'תקשורת',
+  'ריהוט ובית': 'קניות',
+  'ביגוד והנעלה': 'קניות',
+  'אופנה': 'קניות',
+  'פנאי בילוי': 'בידור',
+  'בילוי ופנאי': 'בידור',
+  'ספורט': 'בידור',
+  'תיירות ונופש': 'נסיעות',
+  'חינוך ופנאי': 'חינוך',
+  'ביטוח ופיננסים': 'ביטוח ופיננסים',
+  'מוסדות': 'אחר',
+  'שונות': 'אחר',
+}
+
+/** Normalize a single category value to its canonical Hebrew form. */
+export function normalizeCategory(value) {
+  if (!value) return OTHER_CATEGORY
+  return CATEGORY_NORMALIZE[value] || value
+}
+
+/**
+ * One-time-ish migration: rewrite every stored category value (in transactions
+ * and in category_rules) to its canonical Hebrew form. Idempotent — once values
+ * are canonical, nothing changes on subsequent runs.
+ */
+export function migrateCategoriesToHebrew(db = getDb()) {
+  let changed = 0
+  db.exec('BEGIN')
+  try {
+    for (const table of ['transactions', 'category_rules']) {
+      const cats = db.prepare(`SELECT DISTINCT category FROM ${table}`).all()
+      const upd = db.prepare(`UPDATE ${table} SET category = ? WHERE category = ?`)
+      for (const { category } of cats) {
+        const next = normalizeCategory(category)
+        if (next !== category) changed += upd.run(next, category).changes
+      }
+    }
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return changed
+}
+
+/**
+ * Load all rules from the DB, ordered so the highest-priority rule is first.
+ * Returns array of { keyword (lowercased), category, priority }.
+ */
+export function loadRules(db = getDb()) {
+  return db.prepare(
+    `SELECT keyword, category, priority FROM category_rules
+     ORDER BY priority DESC, length(keyword) DESC, id ASC`
+  ).all().map(r => ({
+    keyword: (r.keyword || '').toLowerCase(),
+    category: r.category,
+    priority: r.priority,
+  }))
+}
+
+/**
+ * Find the category for a description given a pre-loaded, pre-sorted rules array.
+ * Returns the matching category, or null if nothing matches.
+ *
+ * Longer keywords are tried before shorter ones (within the same priority) so a
+ * specific match like "rami levy" wins over a generic one — see loadRules order.
+ */
+export function categorizeDescription(description, rules) {
+  const desc = (description || '').toLowerCase()
+  if (!desc) return null
+  for (const rule of rules) {
+    if (rule.keyword && desc.includes(rule.keyword)) return rule.category
+  }
+  return null
+}
+
+/**
+ * Seed the default rule set, but ONLY if the table is empty. This runs on every
+ * server start; once rules exist (seeded or user-created) it does nothing, so it
+ * never overwrites the user's own rules.
+ */
+export function seedDefaultRules(db = getDb()) {
+  const count = db.prepare(`SELECT COUNT(*) AS c FROM category_rules`).get().c
+  if (count > 0) return 0
+  const stmt = db.prepare(
+    `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
+  )
+  db.exec('BEGIN')
+  try {
+    for (const [keyword, category] of DEFAULT_RULES) stmt.run(keyword, normalizeCategory(category), 0)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return DEFAULT_RULES.length
+}
+
+/**
+ * Apply the current rules to existing transactions.
+ *
+ * @param {object}  db
+ * @param {object}  [opts]
+ * @param {boolean} [opts.onlyOther=true] - when true, only re-categorize rows
+ *        that are currently 'Other' or empty, so manual choices are preserved.
+ *        When false, re-categorize every transaction that a rule matches.
+ * @returns {object} { updated, scanned }
+ */
+export function recategorizeAll(db = getDb(), { onlyOther = true } = {}) {
+  const rules = loadRules(db)
+  const rows = db.prepare(
+    `SELECT id, description, category FROM transactions`
+  ).all()
+
+  const update = db.prepare(
+    `UPDATE transactions SET category = ?, updated_at = datetime('now') WHERE id = ?`
+  )
+
+  let updated = 0
+  db.exec('BEGIN')
+  try {
+    for (const row of rows) {
+      const current = row.category || OTHER_CATEGORY
+      if (onlyOther && current !== OTHER_CATEGORY) continue
+      const next = categorizeDescription(row.description, rules)
+      if (next && next !== current) {
+        update.run(next, row.id)
+        updated++
+      }
+    }
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return { updated, scanned: rows.length }
+}

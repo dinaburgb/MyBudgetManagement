@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import axios from 'axios'
-
-const CATEGORIES = [
-  'Groceries', 'Restaurants', 'Transport', 'Fuel', 'Healthcare',
-  'Utilities', 'Communications', 'Shopping', 'Entertainment',
-  'Education', 'Travel', 'ATM', 'Transfers', 'Other'
-]
+import { CATEGORIES } from '../categories.js'
 
 export default function TransactionsPage() {
   const [rows,    setRows]    = useState([])
   const [total,   setTotal]   = useState(0)
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({ search: '', owner: '', source: '', date_from: '', date_to: '' })
+  const [accounts, setAccounts] = useState([])
+  const [filters, setFilters] = useState({ search: '', owner: '', source: '', category: '', account_id: '', only_in_totals: '', date_from: '', date_to: '' })
+
+  // Load the account list once, for the account filter dropdown
+  useEffect(() => {
+    axios.get('/api/accounts').then(res => setAccounts(res.data)).catch(() => {})
+  }, [])
 
   async function load(p = page) {
     setLoading(true)
@@ -79,6 +80,35 @@ export default function TransactionsPage() {
           <option value="Irena">Irena</option>
           <option value="Joint">Joint</option>
         </select>
+        <select
+          value={filters.category}
+          onChange={e => setFilter('category', e.target.value)}
+          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All categories</option>
+          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select
+          value={filters.account_id}
+          onChange={e => setFilter('account_id', e.target.value)}
+          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All accounts</option>
+          {accounts.map(a => (
+            <option key={a.id} value={a.id}>
+              {a.name}{a.include_in_totals ? '' : ' (excluded)'}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={filters.only_in_totals === '1'}
+            onChange={e => setFilter('only_in_totals', e.target.checked ? '1' : '')}
+            className="w-4 h-4 accent-blue-600"
+          />
+          Only accounts in totals
+        </label>
         <input
           type="date"
           value={filters.date_from}
@@ -93,7 +123,7 @@ export default function TransactionsPage() {
           className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
-          onClick={() => setFilters({ search: '', owner: '', source: '', date_from: '', date_to: '' })}
+          onClick={() => setFilters({ search: '', owner: '', source: '', category: '', account_id: '', only_in_totals: '', date_from: '', date_to: '' })}
           className="text-gray-400 hover:text-white text-sm transition-colors"
         >
           Clear
@@ -133,10 +163,14 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <select
-                        value={r.category || 'Other'}
+                        value={r.category || 'אחר'}
                         onChange={e => changeCategory(r.id, e.target.value)}
                         className="bg-gray-800 text-gray-300 rounded px-2 py-1 text-xs outline-none"
                       >
+                        {/* Keep an unmapped category visible instead of silently blank */}
+                        {!CATEGORIES.includes(r.category) && r.category && (
+                          <option value={r.category}>{r.category}</option>
+                        )}
                         {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </td>

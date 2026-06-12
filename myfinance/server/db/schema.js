@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   credentials  TEXT NOT NULL,          -- AES-256-GCM encrypted JSON blob
   last_scraped TEXT,                   -- ISO timestamp of last successful scrape
   enabled      INTEGER NOT NULL DEFAULT 1,
+  include_in_totals INTEGER NOT NULL DEFAULT 1,  -- 0 = exclude from summaries/totals
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -22,8 +22,24 @@ export function openDatabase() {
   fs.mkdirSync(BACKUP_DIR, { recursive: true })
   _db = new DatabaseSync(DB_PATH)
   _db.exec(SCHEMA_SQL)
+  runSchemaMigrations(_db)
   console.log(`Database ready: ${DB_PATH}`)
   return _db
+}
+
+/**
+ * Idempotent schema migrations for databases created before a column existed.
+ * CREATE TABLE IF NOT EXISTS never alters an existing table, so new columns are
+ * added here with ALTER TABLE, guarded by a PRAGMA check so they run only once.
+ */
+function runSchemaMigrations(db) {
+  const hasColumn = (table, col) =>
+    db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)
+
+  if (!hasColumn('accounts', 'include_in_totals')) {
+    db.exec(`ALTER TABLE accounts ADD COLUMN include_in_totals INTEGER NOT NULL DEFAULT 1`)
+    console.log('Migration: added accounts.include_in_totals')
+  }
 }
 
 /** Get the active database connection. Throws if not yet opened. */

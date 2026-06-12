@@ -17,6 +17,8 @@ router.use((req, res, next) => {
 router.get('/', (req, res) => {
   const {
     owner, source, category, status,
+    account_id, exclude_account_id,
+    only_in_totals,
     date_from, date_to,
     amount_min, amount_max,
     search,
@@ -30,6 +32,12 @@ router.get('/', (req, res) => {
   if (source)     { where.push('source = ?');     params.push(source) }
   if (category)   { where.push('category = ?');   params.push(category) }
   if (status)     { where.push('status = ?');     params.push(status) }
+  if (account_id) { where.push('account_id = ?'); params.push(Number(account_id)) }
+  if (exclude_account_id) { where.push('account_id != ?'); params.push(Number(exclude_account_id)) }
+  // Only transactions from accounts the user includes in totals
+  if (only_in_totals === '1') {
+    where.push('account_id IN (SELECT id FROM accounts WHERE include_in_totals = 1)')
+  }
   if (date_from)  { where.push('date >= ?');      params.push(date_from) }
   if (date_to)    { where.push('date <= ?');      params.push(date_to) }
   if (amount_min) { where.push('amount >= ?');    params.push(Number(amount_min)) }
@@ -48,7 +56,7 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT id, external_id, date, processed_date, amount, original_currency,
            charged_amount, charged_currency, description, memo, category,
-           owner, account_name, source, card_last4, type,
+           owner, account_id, account_name, source, card_last4, type,
            installment_number, installment_total, status
     FROM transactions
     ${whereClause}
