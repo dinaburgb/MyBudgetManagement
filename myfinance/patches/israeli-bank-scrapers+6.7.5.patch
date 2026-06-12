@@ -1,0 +1,128 @@
+diff --git a/node_modules/israeli-bank-scrapers/lib/helpers/elements-interactions.js b/node_modules/israeli-bank-scrapers/lib/helpers/elements-interactions.js
+index efd9183..510a62b 100644
+--- a/node_modules/israeli-bank-scrapers/lib/helpers/elements-interactions.js
++++ b/node_modules/israeli-bank-scrapers/lib/helpers/elements-interactions.js
+@@ -46,6 +46,25 @@ async function fillInput(pageOrFrame, inputSelector, inputValue) {
+     inputElement.value = '';
+   });
+   await pageOrFrame.type(inputSelector, inputValue);
++  // PATCH: some bank login forms (e.g. Hapoalim's Angular login) re-render while
++  // filling and silently drop the typed value, leaving the field empty at submit.
++  // Verify the value actually landed; if not, retry a few times with a focus click
++  // and a per-key delay. This is a no-op when the field already has the value, so
++  // it is safe for every scraper. See server/scrapers/scraper.js for context.
++  for (let attempt = 0; attempt < 3; attempt += 1) {
++    let current = null;
++    try {
++      // @ts-ignore
++      current = await pageOrFrame.$eval(inputSelector, el => el.value);
++    } catch (e) {
++      break; // element gone — nothing we can do here
++    }
++    if (current === inputValue) break;
++    // @ts-ignore
++    await pageOrFrame.$eval(inputSelector, el => { el.value = ''; });
++    await pageOrFrame.click(inputSelector).catch(() => {});
++    await pageOrFrame.type(inputSelector, inputValue, { delay: 40 });
++  }
+ }
+ async function setValue(pageOrFrame, inputSelector, inputValue) {
+   await pageOrFrame.$eval(inputSelector, (input, value) => {
+diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js b/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
+index 630d930..4f41559 100644
+--- a/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
++++ b/node_modules/israeli-bank-scrapers/lib/scrapers/discount.js
+@@ -85,12 +85,33 @@ async function navigateOrErrorLabel(page) {
+   } catch (e) {
+     await (0, _elementsInteractions.waitUntilElementFound)(page, '#general-error', false, 100);
+   }
++  // PATCH: Discount is a single-page app — after the initial navigation it keeps
++  // routing client-side to the homepage (shows a loading spinner). Wait until the
++  // URL settles on the homepage, or on the login/error/change-password page,
++  // before the caller reads the URL. Otherwise the URL check fires too early and
++  // returns UNKNOWN_ERROR. See server/scrapers/scraper.js for context.
++  try {
++    await page.waitForFunction(() => {
++      const u = window.location.href;
++      // Match any post-login app version: retail, retail2, retail3, ...
++      return /\/apollo\/retail\d*\//.test(u)
++          || u.indexOf('MY_ACCOUNT_HOMEPAGE') !== -1
++          || u.indexOf('LOGIN_PAGE') !== -1
++          || u.indexOf('PWD_RENEW') !== -1
++          || !!document.querySelector('#general-error');
++    }, { timeout: 40000, polling: 500 });
++  } catch (e) {
++    // If it never settles, fall through — the URL check will report the result.
++  }
+ }
+ function getPossibleLoginResults() {
+   const urls = {};
+-  urls[_baseScraperWithBrowser.LoginResults.Success] = [`${BASE_URL}/apollo/retail/#/MY_ACCOUNT_HOMEPAGE`, `${BASE_URL}/apollo/retail2/#/MY_ACCOUNT_HOMEPAGE`, `${BASE_URL}/apollo/retail2/`];
+-  urls[_baseScraperWithBrowser.LoginResults.InvalidPassword] = [`${BASE_URL}/apollo/core/templates/lobby/masterPage.html#/LOGIN_PAGE`];
+-  urls[_baseScraperWithBrowser.LoginResults.ChangePassword] = [`${BASE_URL}/apollo/core/templates/lobby/masterPage.html#/PWD_RENEW`];
++  // PATCH: Discount keeps bumping the app path (retail -> retail2 -> retail3 -> ...).
++  // Use a regex so any future version still counts as a successful login,
++  // instead of hard-coding exact URLs that break on every site upgrade.
++  urls[_baseScraperWithBrowser.LoginResults.Success] = [/\/apollo\/retail\d*\//i];
++  urls[_baseScraperWithBrowser.LoginResults.InvalidPassword] = [/LOGIN_PAGE/i];
++  urls[_baseScraperWithBrowser.LoginResults.ChangePassword] = [/PWD_RENEW/i];
+   return urls;
+ }
+ function createLoginFields(credentials) {
+diff --git a/node_modules/israeli-bank-scrapers/lib/scrapers/hapoalim.js b/node_modules/israeli-bank-scrapers/lib/scrapers/hapoalim.js
+index 4ffa0b2..aa57862 100644
+--- a/node_modules/israeli-bank-scrapers/lib/scrapers/hapoalim.js
++++ b/node_modules/israeli-bank-scrapers/lib/scrapers/hapoalim.js
+@@ -184,9 +184,50 @@ class HapoalimScraper extends _baseScraperWithBrowser.BaseScraperWithBrowser {
+   getLoginOptions(credentials) {
+     return {
+       loginUrl: `${this.baseUrl}/cgi-bin/poalwwwc?reqName=getLogonPage`,
++      // PATCH: Hapoalim's login is an Angular app with a custom password-masking
++      // directive. The default flow only waits for the submit button and then fills
++      // immediately — too early, so the typed password does not register and login
++      // fails ("one or more details wrong"). Wait for both fields to be visible and
++      // give the page a short settle delay before filling.
++      checkReadiness: async () => {
++        await this.page.waitForSelector('#userCode', { visible: true, timeout: 30000 });
++        await this.page.waitForSelector('#password', { visible: true, timeout: 30000 });
++        await this.page.waitForSelector('.login-btn', { visible: true, timeout: 30000 });
++        await new Promise(resolve => { setTimeout(resolve, 2500); });
++      },
+       fields: createLoginFields(credentials),
+-      submitButtonSelector: '.login-btn',
+-      postAction: async () => (0, _navigation.waitForRedirect)(this.page),
++      // PATCH: the default flow clicks submit ~100ms after typing the password,
++      // before Angular commits the value — so login fails. Use a function so we can
++      // blur the password field (commits the value via updateOn/change) and wait a
++      // moment before actually clicking the login button.
++      submitButtonSelector: async () => {
++        await this.page.$eval('#password', el => {
++          el.dispatchEvent(new Event('input', { bubbles: true }));
++          el.dispatchEvent(new Event('change', { bubbles: true }));
++          el.blur();
++        }).catch(() => {});
++        await new Promise(resolve => { setTimeout(resolve, 1500); });
++        await this.page.click('.login-btn');
++      },
++      // PATCH: Hapoalim often requires an SMS (OTP) code after login. With a visible
++      // browser the user types the code manually in the window. Instead of waiting
++      // only ~20s for a redirect, wait up to 5 minutes for the page to reach the
++      // post-login homepage (or land back on the login/error page). This gives the
++      // user time to receive and enter the SMS code without the window closing.
++      postAction: async () => {
++        try {
++          await this.page.waitForFunction(() => {
++            const u = window.location.href;
++            return /homepage/i.test(u)
++                || u.indexOf('/portalserver/HomePage') !== -1
++                || u.indexOf('errorcode=1.6') !== -1   // invalid password
++                || u.indexOf('/MCP/START') !== -1      // change password
++                || /ABOUTTOEXPIRE/i.test(u);
++          }, { timeout: 300000, polling: 1000 });
++        } catch (e) {
++          // Timed out waiting — fall through; the URL check reports the result.
++        }
++      },
+       possibleResults: getPossibleLoginResults(this.baseUrl)
+     };
+   }
