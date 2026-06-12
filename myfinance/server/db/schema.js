@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   charged_amount      REAL,
   charged_currency    TEXT DEFAULT 'ILS',
   description         TEXT NOT NULL DEFAULT '',
-  memo                TEXT DEFAULT '',
+  memo                TEXT DEFAULT '',          -- raw memo from the scraper (do not overwrite)
+  note                TEXT DEFAULT '',          -- user's own free-text note on the transaction
   category            TEXT DEFAULT 'Other',
   owner               TEXT DEFAULT 'Boris',  -- Boris / Irena / Joint
   account_id          INTEGER REFERENCES accounts(id),

@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
+import NoteEditor from '../NoteEditor.jsx'
 
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -133,6 +134,9 @@ export default function OverviewPage() {
       .then(res => setDrill({ category, rows: res.data.rows }))
       .catch(() => setDrill({ category, rows: [] }))
       .finally(() => setDrillLoading(false))
+  }
+  function updateDrillNote(id, note) {
+    setDrill(d => d && ({ ...d, rows: d.rows.map(r => r.id === id ? { ...r, note } : r) }))
   }
 
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
@@ -291,6 +295,9 @@ export default function OverviewPage() {
                               </span>
                             )}
                             <span className="text-gray-600 text-xs"> · {r.account_name}</span>
+                            <div className="mt-1">
+                              <NoteEditor id={r.id} note={r.note} onSaved={n => updateDrillNote(r.id, n)} />
+                            </div>
                           </td>
                           <td className={`py-2 text-left font-mono whitespace-nowrap align-top ${r.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
                             {r.amount < 0 ? '-' : '+'}{ils(Math.abs(r.amount))}

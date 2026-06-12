@@ -40,6 +40,11 @@ function runSchemaMigrations(db) {
     db.exec(`ALTER TABLE accounts ADD COLUMN include_in_totals INTEGER NOT NULL DEFAULT 1`)
     console.log('Migration: added accounts.include_in_totals')
   }
+
+  if (!hasColumn('transactions', 'note')) {
+    db.exec(`ALTER TABLE transactions ADD COLUMN note TEXT DEFAULT ''`)
+    console.log('Migration: added transactions.note')
+  }
 }
 
 /** Get the active database connection. Throws if not yet opened. */

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import axios from 'axios'
 import { useCategories } from '../CategoriesContext.jsx'
+import NoteEditor from '../NoteEditor.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -43,6 +44,10 @@ export default function TransactionsPage() {
   async function changeCategory(id, category) {
     await axios.put(`/api/transactions/${id}/category`, { category })
     setRows(prev => prev.map(r => r.id === id ? { ...r, category } : r))
+  }
+
+  function updateNote(id, note) {
+    setRows(prev => prev.map(r => r.id === id ? { ...r, note } : r))
   }
 
   function setFilter(key, value) {
@@ -152,6 +157,7 @@ export default function TransactionsPage() {
                   <th className="text-right px-4 py-3 font-medium">תיאור</th>
                   <th className="text-left px-4 py-3 font-medium">סכום</th>
                   <th className="text-right px-4 py-3 font-medium">קטגוריה</th>
+                  <th className="text-right px-4 py-3 font-medium">הערה</th>
                   <th className="text-right px-4 py-3 font-medium">בעלים</th>
                   <th className="text-right px-4 py-3 font-medium">מקור</th>
                 </tr>
@@ -185,6 +191,9 @@ export default function TransactionsPage() {
                         )}
                         {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                    </td>
+                    <td className="px-4 py-3 max-w-[12rem]">
+                      <NoteEditor id={r.id} note={r.note} onSaved={n => updateNote(r.id, n)} />
                     </td>
                     <td className="px-4 py-3 text-gray-400">{r.owner}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{SOURCE_LABELS[r.source] || r.source}</td>
