@@ -32,7 +32,26 @@ const app    = express()
 const server = createServer(app)
 const wss    = new WebSocketServer({ server })  // WebSocket for OTP popups
 
-app.use(cors())
+// CORS — locked down. The React app is served from this same origin (and in dev
+// Vite proxies /api to here), so browser requests are same-origin and need no
+// CORS at all. We allow ONLY localhost origins so that an arbitrary website you
+// happen to have open cannot read your financial data from localhost:3000 while
+// the app is unlocked. Any other origin is rejected.
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5173',  // Vite dev server
+  'http://127.0.0.1:5173',
+])
+app.use(cors({
+  origin(origin, callback) {
+    // No Origin header (same-origin requests, curl, server-to-server) → allow.
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true)
+    // Unknown origin: respond normally but WITHOUT the CORS header, so the
+    // browser blocks the other site from reading the response (no 500 noise).
+    return callback(null, false)
+  },
+}))
 app.use(express.json())
 
 // Serve compiled React app
