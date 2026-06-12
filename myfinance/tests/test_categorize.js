@@ -10,7 +10,8 @@ import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import {
   loadRules, categorizeDescription, seedDefaultRules, recategorizeAll, DEFAULT_RULES,
-  normalizeCategory, migrateCategoriesToHebrew, OTHER_CATEGORY, applyRuleToUncategorized,
+  normalizeCategory, migrateCategoriesToHebrew, OTHER_CATEGORY,
+  applyRuleToUncategorized, applyKeywordToAll,
 } from '../server/db/categorize.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 
@@ -102,7 +103,7 @@ test('new transactions are auto-categorized on import (Hebrew)', () => {
   ] }, db)
   const rows = db.prepare('SELECT description, category FROM transactions ORDER BY id').all()
   assert.strictEqual(rows[0].category, 'מזון')
-  assert.strictEqual(rows[1].category, 'דלק')
+  assert.strictEqual(rows[1].category, 'רכב')   // fuel folds into vehicle (רכב)
   assert.strictEqual(rows[2].category, 'אחר')  // no match → Other
 })
 
@@ -160,7 +161,8 @@ test('recategorize (all mode) re-evaluates manually-set rows too', () => {
 test('normalizeCategory folds English and Cal taxonomies into canonical Hebrew', () => {
   assert.strictEqual(normalizeCategory('Groceries'), 'מזון')
   assert.strictEqual(normalizeCategory('מזון ומשקאות'), 'מזון')
-  assert.strictEqual(normalizeCategory('אנרגיה'), 'דלק')
+  assert.strictEqual(normalizeCategory('אנרגיה'), 'רכב')   // fuel → vehicle
+  assert.strictEqual(normalizeCategory('דלק'), 'רכב')      // legacy fuel category → vehicle
   // Max taxonomy folds in too
   assert.strictEqual(normalizeCategory('מזון וצריכה'), 'מזון')
   assert.strictEqual(normalizeCategory('פנאי, בידור וספורט'), 'בידור')
@@ -181,7 +183,7 @@ test('migrateCategoriesToHebrew converts existing rows and is idempotent', () =>
   const changed = migrateCategoriesToHebrew(db)
   assert.ok(changed >= 2)
   assert.strictEqual(db.prepare('SELECT category FROM transactions').get().category, 'מזון')
-  assert.strictEqual(db.prepare('SELECT category FROM category_rules').get().category, 'דלק')
+  assert.strictEqual(db.prepare('SELECT category FROM category_rules').get().category, 'רכב')
 
   const again = migrateCategoriesToHebrew(db)
   assert.strictEqual(again, 0)  // idempotent
@@ -199,6 +201,18 @@ test('applyRuleToUncategorized categorizes matching אחר rows only', () => {
   assert.strictEqual(n, 2)  // only the two אחר rows moved; the pre-set one untouched
   const cats = db.prepare(`SELECT COUNT(*) c FROM transactions WHERE category='תחבורה'`).get().c
   assert.strictEqual(cats, 3)
+})
+
+test('applyKeywordToAll overrides already-categorized matching rows', () => {
+  const db = freshDb()
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ description: 'פריים מוטורס מוסך', category: 'תחבורה' }),     // already categorized
+    txn({ description: 'מוסך הצפון', chargedAmount: -300 }),            // אחר
+    txn({ description: 'סופרמרקט', chargedAmount: -80 }),               // unrelated
+  ] }, db)
+  const n = applyKeywordToAll(db, 'מוסך', 'רכב')
+  assert.strictEqual(n, 2)  // both מוסך rows moved, including the one set to תחבורה
+  assert.strictEqual(db.prepare(`SELECT COUNT(*) c FROM transactions WHERE category='רכב'`).get().c, 2)
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

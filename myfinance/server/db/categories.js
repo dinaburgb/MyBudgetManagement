@@ -38,6 +38,27 @@ export function seedCategories(db = getDb()) {
   return CATEGORIES_HE.length
 }
 
+/**
+ * One-time rename of the legacy 'דלק' (fuel) category row to 'רכב' (vehicle),
+ * broadening it to all car expenses. Transaction/rule/budget values are moved by
+ * migrateCategoriesToHebrew (via the 'דלק'→'רכב' normalize entry); this just
+ * renames the category row so the list stays in sync. Idempotent.
+ */
+export function migrateFuelToVehicle(db = getDb()) {
+  const fuel = db.prepare(`SELECT id FROM categories WHERE name = 'דלק'`).get()
+  const veh  = db.prepare(`SELECT id FROM categories WHERE name = 'רכב'`).get()
+  if (fuel && !veh) {
+    db.prepare(`UPDATE categories SET name = 'רכב' WHERE id = ?`).run(fuel.id)
+    return 1
+  }
+  // If both somehow exist, drop the now-empty fuel row (data already moved).
+  if (fuel && veh) {
+    db.prepare(`DELETE FROM categories WHERE id = ?`).run(fuel.id)
+    return 1
+  }
+  return 0
+}
+
 /** All categories, ordered for display. */
 export function listCategories(db = getDb()) {
   return db.prepare(

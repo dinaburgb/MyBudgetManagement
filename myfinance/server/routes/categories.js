@@ -12,7 +12,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { recategorizeAll, applyRuleToUncategorized } from '../db/categorize.js'
+import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll } from '../db/categorize.js'
 import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
 
 const router = Router()
@@ -86,9 +86,12 @@ router.post('/rules', (req, res) => {
   const result = db.prepare(
     `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
   ).run(kw, cat, Number(priority) || 0)
-  // Apply the new rule immediately to uncategorized transactions so the user
-  // sees the effect right away (does not override already-categorized rows).
-  const applied = applyRuleToUncategorized(db, kw, cat)
+  // Apply the new rule to existing transactions right away. Default touches only
+  // uncategorized rows; 'all' overrides already-categorized matches too (used to
+  // pull charges into a category like רכב from wherever they currently sit).
+  const applied = req.body.applyMode === 'all'
+    ? applyKeywordToAll(db, kw, cat)
+    : applyRuleToUncategorized(db, kw, cat)
   res.json({ id: result.lastInsertRowid, message: 'Rule added', applied })
 })
 

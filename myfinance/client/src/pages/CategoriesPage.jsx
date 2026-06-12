@@ -126,6 +126,7 @@ export default function CategoriesPage() {
   const [category, setCategory] = useState('')
   const [adding,   setAdding]   = useState(false)
   const [ruleMsg,  setRuleMsg]  = useState(null)
+  const [overrideAll, setOverrideAll] = useState(false)
 
   // Re-categorize state
   const [recat,    setRecat]    = useState(false)
@@ -156,11 +157,14 @@ export default function CategoriesPage() {
     setAdding(true)
     setRuleMsg(null)
     try {
-      const res = await axios.post('/api/categories/rules', { keyword: keyword.trim(), category: ruleCategory })
+      const res = await axios.post('/api/categories/rules', {
+        keyword: keyword.trim(), category: ruleCategory,
+        applyMode: overrideAll ? 'all' : 'uncategorized',
+      })
       const applied = res.data.applied || 0
       setRuleMsg(applied > 0
-        ? `הכלל נוסף — ${applied} תנועות קיימות סווגו ל"${ruleCategory}"`
-        : 'הכלל נוסף. הוא יחול על תנועות חדשות (לא נמצאו תנועות לא מסווגות תואמות).')
+        ? `הכלל נוסף — ${applied} תנועות סווגו ל"${ruleCategory}"`
+        : 'הכלל נוסף. הוא יחול על תנועות חדשות (לא נמצאו תנועות תואמות).')
       setKeyword('')
       await load()
     } finally {
@@ -260,9 +264,13 @@ export default function CategoriesPage() {
             {adding ? 'מוסיף...' : 'הוסף'}
           </button>
         </div>
+        <label className="flex items-center gap-2 mt-3 text-sm text-gray-400 cursor-pointer select-none w-fit">
+          <input type="checkbox" checked={overrideAll} onChange={e => setOverrideAll(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+          החל גם על תנועות שכבר מסווגות (לא רק "אחר")
+        </label>
         {ruleMsg && <p className="text-sm text-green-400 mt-3">{ruleMsg}</p>}
         <p className="text-xs text-gray-500 mt-2">
-          כלל חדש מסווג מיד תנועות לא מסווגות שמתאימות, וגם יחול על תנועות עתידיות.
+          כלל חדש מסווג מיד תנועות תואמות, וגם יחול על תנועות עתידיות.
         </p>
       </form>
 

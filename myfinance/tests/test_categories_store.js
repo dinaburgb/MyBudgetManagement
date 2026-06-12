@@ -72,7 +72,7 @@ test('rename propagates to transactions, rules and budgets', () => {
 
 test('rename to an existing name is rejected', () => {
   const db = freshDb()
-  assert.throws(() => updateCategory(db, catId(db, 'מזון'), { name: 'דלק' }), e => e.code === 'EXISTS')
+  assert.throws(() => updateCategory(db, catId(db, 'מזון'), { name: 'רכב' }), e => e.code === 'EXISTS')
 })
 
 test('delete reassigns transactions/rules to אחר and drops its budgets', () => {
