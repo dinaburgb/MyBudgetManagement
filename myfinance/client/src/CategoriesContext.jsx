@@ -7,7 +7,18 @@ const CategoriesContext = createContext({
   categories: [], names: [], colorFor: () => '#94a3b8', reload: () => {},
 })
 
-const FALLBACK_COLOR = '#94a3b8'
+// Palette used to give a stable, non-gray color to any category that isn't in
+// the DB list yet (e.g. a scraper category we haven't mapped). Derived from the
+// name so the same category always gets the same color.
+const FALLBACK_PALETTE = [
+  '#60a5fa', '#34d399', '#f472b6', '#fbbf24', '#a78bfa',
+  '#f87171', '#22d3ee', '#fb923c', '#4ade80', '#e879f9',
+]
+function fallbackColor(name) {
+  let h = 0
+  for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return FALLBACK_PALETTE[h % FALLBACK_PALETTE.length]
+}
 
 export function CategoriesProvider({ children }) {
   const [categories, setCategories] = useState([])
@@ -22,7 +33,7 @@ export function CategoriesProvider({ children }) {
 
   const names = categories.map(c => c.name)
   const colorMap = Object.fromEntries(categories.map(c => [c.name, c.color]))
-  const colorFor = name => colorMap[name] || FALLBACK_COLOR
+  const colorFor = name => colorMap[name] || fallbackColor(name)
 
   return (
     <CategoriesContext.Provider value={{ categories, names, colorFor, reload }}>

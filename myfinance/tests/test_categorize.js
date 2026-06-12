@@ -161,6 +161,10 @@ test('normalizeCategory folds English and Cal taxonomies into canonical Hebrew',
   assert.strictEqual(normalizeCategory('Groceries'), 'מזון')
   assert.strictEqual(normalizeCategory('מזון ומשקאות'), 'מזון')
   assert.strictEqual(normalizeCategory('אנרגיה'), 'דלק')
+  // Max taxonomy folds in too
+  assert.strictEqual(normalizeCategory('מזון וצריכה'), 'מזון')
+  assert.strictEqual(normalizeCategory('פנאי, בידור וספורט'), 'בידור')
+  assert.strictEqual(normalizeCategory('תחבורה ורכבים'), 'תחבורה')
   assert.strictEqual(normalizeCategory('שונות'), 'אחר')
   assert.strictEqual(normalizeCategory('מזון'), 'מזון')        // already canonical → unchanged
   assert.strictEqual(normalizeCategory(null), OTHER_CATEGORY)  // empty → Other
