@@ -33,9 +33,11 @@ export const DEFAULT_RULES = [
   ['מקדונלד', 'Restaurants'], ['mcdonald', 'Restaurants'], ['בורגר', 'Restaurants'],
   ['פיצה', 'Restaurants'], ['pizza', 'Restaurants'], ['wolt', 'Restaurants'],
   ['וולט', 'Restaurants'], ['10bis', 'Restaurants'], ['תן ביס', 'Restaurants'],
-  // Fuel
+  // Vehicle (רכב): fuel, garage, licensing, mandatory car insurance
   ['פז', 'Fuel'], ['paz', 'Fuel'], ['דלק', 'Fuel'], ['delek', 'Fuel'],
   ['סונול', 'Fuel'], ['sonol', 'Fuel'], ['דור אלון', 'Fuel'], ['ten', 'Fuel'],
+  ['תחנת דלק', 'רכב'], ['מוסך', 'רכב'], ['רישוי', 'רכב'], ['עידן הרכב', 'רכב'],
+  ['רכב חובה', 'רכב'],
   // Transport
   ['רכבת', 'Transport'], ['אגד', 'Transport'], ['רב קו', 'Transport'],
   ['רב-קו', 'Transport'], ['מטרופולין', 'Transport'], ['פנגו', 'Transport'],
@@ -76,7 +78,7 @@ export const DEFAULT_RULES = [
  * Keep client/src/categories.js in sync with this list.
  */
 export const CATEGORIES_HE = [
-  'מזון', 'מסעדות', 'תחבורה', 'דלק', 'בריאות', 'חשבונות בית',
+  'מזון', 'מסעדות', 'תחבורה', 'רכב', 'בריאות', 'חשבונות בית',
   'תקשורת', 'קניות', 'בידור', 'חינוך', 'נסיעות', 'ביטוח ופיננסים',
   'משיכת מזומן', 'העברות', 'אחר',
 ]
@@ -95,15 +97,17 @@ export const OTHER_CATEGORY = 'אחר'
  */
 export const CATEGORY_NORMALIZE = {
   // --- legacy English ---
-  Groceries: 'מזון', Restaurants: 'מסעדות', Transport: 'תחבורה', Fuel: 'דלק',
+  Groceries: 'מזון', Restaurants: 'מסעדות', Transport: 'תחבורה', Fuel: 'רכב',
   Healthcare: 'בריאות', Utilities: 'חשבונות בית', Communications: 'תקשורת',
   Shopping: 'קניות', Entertainment: 'בידור', Education: 'חינוך', Travel: 'נסיעות',
   ATM: 'משיכת מזומן', Transfers: 'העברות', Other: 'אחר',
+  // Fuel folds into the broader "vehicle" (רכב) category.
+  'דלק': 'רכב',
   // --- Visa Cal / scraper Hebrew taxonomy ---
   'מזון ומשקאות': 'מזון',
   'מסעדות ובתי קפה': 'מסעדות',
   'רכב ותחבורה': 'תחבורה',
-  'אנרגיה': 'דלק',
+  'אנרגיה': 'רכב',
   'רפואה ובריאות': 'בריאות',
   'תקשורת ומחשבים': 'תקשורת',
   'ריהוט ובית': 'קניות',
@@ -117,6 +121,23 @@ export const CATEGORY_NORMALIZE = {
   'ביטוח ופיננסים': 'ביטוח ופיננסים',
   'מוסדות': 'אחר',
   'שונות': 'אחר',
+  // --- Max taxonomy ---
+  'מזון וצריכה': 'מזון',
+  'מסעדות, קפה וברים': 'מסעדות',
+  'פנאי, בידור וספורט': 'בידור',
+  'תחבורה ורכבים': 'תחבורה',
+  'ביטוח': 'ביטוח ופיננסים',
+  'רפואה ובתי מרקחת': 'בריאות',
+  'עיצוב הבית': 'קניות',
+  'דלק, חשמל וגז': 'רכב',
+  'חשמל ומחשבים': 'תקשורת',
+  'שירותי תקשורת': 'תקשורת',
+  'העברת כספים': 'העברות',
+  'קוסמטיקה וטיפוח': 'קניות',
+  'ספרים ודפוס': 'חינוך',
+  'חיות מחמד': 'קניות',
+  'טיסות ותיירות': 'נסיעות',
+  'עירייה וממשלה': 'חשבונות בית',
 }
 
 /** Normalize a single category value to its canonical Hebrew form. */
@@ -134,7 +155,7 @@ export function migrateCategoriesToHebrew(db = getDb()) {
   let changed = 0
   db.exec('BEGIN')
   try {
-    for (const table of ['transactions', 'category_rules']) {
+    for (const table of ['transactions', 'category_rules', 'budgets']) {
       const cats = db.prepare(`SELECT DISTINCT category FROM ${table}`).all()
       const upd = db.prepare(`UPDATE ${table} SET category = ? WHERE category = ?`)
       for (const { category } of cats) {
@@ -201,6 +222,38 @@ export function seedDefaultRules(db = getDb()) {
     throw err
   }
   return DEFAULT_RULES.length
+}
+
+/**
+ * Apply a single new rule to existing UNCATEGORIZED ('אחר') transactions whose
+ * description contains the keyword. Used right after a rule is added so the user
+ * sees an immediate effect, without overriding categories already set manually
+ * or by another rule. Returns the number of transactions updated.
+ */
+export function applyRuleToUncategorized(db, keyword, category) {
+  if (!keyword) return 0
+  // LIKE is case-insensitive for ASCII in SQLite, and Hebrew has no case, so a
+  // plain substring match works for both. Escape LIKE wildcards in the keyword.
+  const safe = String(keyword).replace(/[\\%_]/g, ch => '\\' + ch)
+  return db.prepare(
+    `UPDATE transactions SET category = ?, updated_at = datetime('now')
+     WHERE category = ? AND description LIKE ? ESCAPE '\\'`
+  ).run(category, OTHER_CATEGORY, `%${safe}%`).changes
+}
+
+/**
+ * Force-assign a category to EVERY existing transaction whose description matches
+ * the keyword, regardless of its current category. Used when the user wants a
+ * keyword rule to also pull in already-categorized transactions (e.g. moving
+ * garage/insurance charges into a "רכב" category). Returns rows updated.
+ */
+export function applyKeywordToAll(db, keyword, category) {
+  if (!keyword) return 0
+  const safe = String(keyword).replace(/[\\%_]/g, ch => '\\' + ch)
+  return db.prepare(
+    `UPDATE transactions SET category = ?, updated_at = datetime('now')
+     WHERE category != ? AND description LIKE ? ESCAPE '\\'`
+  ).run(category, category, `%${safe}%`).changes
 }
 
 /**

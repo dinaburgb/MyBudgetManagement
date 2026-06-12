@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import axios from 'axios'
-import { CATEGORIES } from '../categories.js'
+import { useCategories } from '../CategoriesContext.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -9,6 +9,7 @@ const SOURCE_LABELS = {
 }
 
 export default function TransactionsPage() {
+  const { names: CATEGORIES } = useCategories()
   const [rows,    setRows]    = useState([])
   const [total,   setTotal]   = useState(0)
   const [page,    setPage]    = useState(1)
@@ -159,7 +160,14 @@ export default function TransactionsPage() {
                 {rows.map(r => (
                   <tr key={r.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                     <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{r.date}</td>
-                    <td className="px-4 py-3 text-white max-w-xs truncate">{r.description}</td>
+                    <td className="px-4 py-3 text-white max-w-xs">
+                      <div className="truncate">{r.description}</div>
+                      {r.type === 'installment' && r.installment_total > 1 && (
+                        <span className="inline-block mt-0.5 text-xs text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
+                          תשלום {r.installment_number} מתוך {r.installment_total}
+                        </span>
+                      )}
+                    </td>
                     <td className={`px-4 py-3 text-left whitespace-nowrap font-mono ${
                       r.amount < 0 ? 'text-red-400' : 'text-green-400'
                     }`}>

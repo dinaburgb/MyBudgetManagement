@@ -10,6 +10,7 @@ import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth } from '../server/db/budgets.js'
+import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -24,6 +25,7 @@ function freshDb() {
   db.exec(SCHEMA_SQL)
   db.prepare(`INSERT INTO accounts (id, name, source, owner, credentials, include_in_totals) VALUES (?,?,?,?,?,1)`)
     .run(account.id, account.name, account.source, account.owner, 'x')
+  seedCategories(db)
   return db
 }
 
@@ -63,10 +65,10 @@ test('excluded accounts are not counted in spent', () => {
   const db = freshDb()
   db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'X','cal','Mom','x',0)`).run()
   const excluded = { id: 2, name: 'X', source: 'cal', owner: 'Mom' }
-  saveAccountTransactions(account,  { accountNumber: '1', txns: [txn({ category: 'דלק', chargedAmount: -100, description: 'a' })] }, db)
-  saveAccountTransactions(excluded, { accountNumber: '2', txns: [txn({ category: 'דלק', chargedAmount: -500, description: 'b' })] }, db)
+  saveAccountTransactions(account,  { accountNumber: '1', txns: [txn({ category: 'רכב', chargedAmount: -100, description: 'a' })] }, db)
+  saveAccountTransactions(excluded, { accountNumber: '2', txns: [txn({ category: 'רכב', chargedAmount: -500, description: 'b' })] }, db)
   const rows = computeBudgetOverview(db, '2026-06')
-  assert.strictEqual(find(rows, 'דלק').spent, 100)  // excluded account's 500 not counted
+  assert.strictEqual(find(rows, 'רכב').spent, 100)  // excluded account's 500 not counted
 })
 
 test('default limit applies to every month; overview reports remaining', () => {
@@ -95,11 +97,11 @@ test('a month override beats the default for that month only', () => {
 
 test('setBudget upserts (no duplicate rows)', () => {
   const db = freshDb()
-  setBudget(db, 'דלק', 500)
-  setBudget(db, 'דלק', 800)  // update same (category, '')
-  const count = db.prepare(`SELECT COUNT(*) c FROM budgets WHERE category='דלק'`).get().c
+  setBudget(db, 'רכב', 500)
+  setBudget(db, 'רכב', 800)  // update same (category, '')
+  const count = db.prepare(`SELECT COUNT(*) c FROM budgets WHERE category='רכב'`).get().c
   assert.strictEqual(count, 1)
-  assert.strictEqual(find(computeBudgetOverview(db, '2026-06'), 'דלק').limit, 800)
+  assert.strictEqual(find(computeBudgetOverview(db, '2026-06'), 'רכב').limit, 800)
 })
 
 test('deleteBudget removes only the targeted scope', () => {

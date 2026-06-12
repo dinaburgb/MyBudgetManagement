@@ -10,7 +10,7 @@
  */
 
 import { getDb } from './database.js'
-import { CATEGORIES_HE } from './categorize.js'
+import { listCategoryNames } from './categories.js'
 
 /** Validate a 'YYYY-MM' string. */
 export function isValidMonth(m) {
@@ -53,7 +53,7 @@ export function computeBudgetOverview(db = getDb(), month) {
   // One row per known category, plus any category that has a budget or spending
   // but isn't in the canonical list (defensive).
   const categories = new Set([
-    ...CATEGORIES_HE,
+    ...listCategoryNames(db),
     ...defaults.keys(), ...overrides.keys(), ...spentByCat.keys(),
   ])
 

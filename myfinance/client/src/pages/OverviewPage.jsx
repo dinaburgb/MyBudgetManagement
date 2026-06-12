@@ -5,7 +5,8 @@ import {
 } from 'recharts'
 import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
-import { colorFor, ils } from '../colors.js'
+import { ils } from '../colors.js'
+import { useCategories } from '../CategoriesContext.jsx'
 
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -61,8 +62,9 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 export default function OverviewPage() {
+  const { colorFor } = useCategories()
   const monthChips = useMemo(() => recentMonths(18), [])           // newest first
-  const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(6)))
+  const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(1)))
   const [rangeFrom, setRangeFrom]     = useState('')
   const [rangeTo, setRangeTo]         = useState('')
   const [accounts, setAccounts]       = useState([])
@@ -115,6 +117,22 @@ export default function OverviewPage() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  // Drill-down: clicking a pie slice loads that category's transactions for the
+  // current month/account selection.
+  const [drill, setDrill] = useState(null)        // { category, rows } | null
+  const [drillLoading, setDrillLoading] = useState(false)
+  function openDrill(category) {
+    if (!category) return
+    setDrill({ category, rows: [] })
+    setDrillLoading(true)
+    const months = [...selMonths].sort().join(',')
+    const acc = [...(selAccounts || [])].join(',')
+    axios.get('/api/stats/transactions', { params: { category, months, accounts: acc } })
+      .then(res => setDrill({ category, rows: res.data.rows }))
+      .catch(() => setDrill({ category, rows: [] }))
+      .finally(() => setDrillLoading(false))
   }
 
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
@@ -227,11 +245,13 @@ export default function OverviewPage() {
 
             {/* Expenses by category */}
             <div className="bg-gray-900 rounded-xl p-5">
-              <h3 className="text-white font-medium mb-4">הוצאות לפי קטגוריה</h3>
+              <h3 className="text-white font-medium mb-1">הוצאות לפי קטגוריה</h3>
+              <p className="text-xs text-gray-500 mb-3">לחץ על פלח כדי לראות את החיובים</p>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie data={pie} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                       innerRadius={62} outerRadius={100} paddingAngle={2}>
+                       innerRadius={62} outerRadius={100} paddingAngle={2}
+                       cursor="pointer" onClick={d => openDrill(d?.name)}>
                     {pie.map(entry => <Cell key={entry.name} fill={colorFor(entry.name)} stroke="#111827" />)}
                   </Pie>
                   <Tooltip content={<ChartTooltip />} />
@@ -240,6 +260,49 @@ export default function OverviewPage() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* Drill-down: transactions for the clicked category */}
+          {drill && (
+            <div className="bg-gray-900 rounded-xl p-5 mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-white font-medium flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
+                  חיובים בקטגוריה: {drill.category}
+                  <span className="text-gray-500 text-sm">({drill.rows.length})</span>
+                </h3>
+                <button onClick={() => setDrill(null)} className="text-gray-400 hover:text-white text-sm">סגור ✕</button>
+              </div>
+              {drillLoading ? (
+                <div className="text-gray-400 text-sm">טוען...</div>
+              ) : drill.rows.length === 0 ? (
+                <div className="text-gray-500 text-sm">אין חיובים בקטגוריה זו לבחירה הנוכחית.</div>
+              ) : (
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {drill.rows.map(r => (
+                        <tr key={r.id} className="border-b border-gray-800/50">
+                          <td className="py-2 pl-3 text-gray-400 whitespace-nowrap align-top">{r.date}</td>
+                          <td className="py-2 text-white">
+                            <div>{r.description}</div>
+                            {r.type === 'installment' && r.installment_total > 1 && (
+                              <span className="text-xs text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
+                                תשלום {r.installment_number} מתוך {r.installment_total}
+                              </span>
+                            )}
+                            <span className="text-gray-600 text-xs"> · {r.account_name}</span>
+                          </td>
+                          <td className={`py-2 text-left font-mono whitespace-nowrap align-top ${r.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                            {r.amount < 0 ? '-' : '+'}{ils(Math.abs(r.amount))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>

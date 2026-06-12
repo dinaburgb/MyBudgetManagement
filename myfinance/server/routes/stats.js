@@ -41,21 +41,23 @@ function lastMonths(n) {
   return out
 }
 
-router.get('/overview', (req, res) => {
-  const db = getDb()
-
-  // --- resolve selected months ---
+/** Resolve months[] and accountIds[] from the query, applying defaults. */
+function resolveSelection(db, req) {
   let months = String(req.query.months || '').split(',').map(s => s.trim()).filter(isMonth)
   if (months.length === 0) months = lastMonths(6)
   months = [...new Set(months)].sort()
 
-  // --- resolve selected accounts ---
   let accountIds = String(req.query.accounts || '').split(',')
     .map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0)
   if (accountIds.length === 0) {
-    accountIds = db.prepare(`SELECT id FROM accounts WHERE include_in_totals = 1`)
-      .all().map(r => r.id)
+    accountIds = db.prepare(`SELECT id FROM accounts WHERE include_in_totals = 1`).all().map(r => r.id)
   }
+  return { months, accountIds }
+}
+
+router.get('/overview', (req, res) => {
+  const db = getDb()
+  const { months, accountIds } = resolveSelection(db, req)
 
   // Nothing selected → empty result (avoid an empty IN () which is invalid SQL)
   if (accountIds.length === 0) {
@@ -106,6 +108,32 @@ router.get('/overview', (req, res) => {
   totals.balance = totals.income - totals.expenses
 
   res.json({ months, monthly, byCategory, totals, netBalance: netBalance(db, accountIds) })
+})
+
+/**
+ * GET /api/stats/transactions?category=..&months=..&accounts=..
+ * The transactions behind a chart slice: a category within the selected months
+ * and accounts, newest first. Used by the Overview pie drill-down.
+ */
+router.get('/transactions', (req, res) => {
+  const db = getDb()
+  const { months, accountIds } = resolveSelection(db, req)
+  const category = req.query.category
+  if (!category) return res.status(400).json({ error: 'category is required' })
+  if (accountIds.length === 0) return res.json({ category, rows: [] })
+
+  const mP = months.map(() => '?').join(',')
+  const aP = accountIds.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT id, date, description, amount, category, account_name, source,
+           type, installment_number, installment_total
+    FROM transactions
+    WHERE category = ?
+      AND substr(date, 1, 7) IN (${mP})
+      AND account_id IN (${aP})
+    ORDER BY date DESC, id DESC
+  `).all(category, ...months, ...accountIds)
+  res.json({ category, rows })
 })
 
 export default router

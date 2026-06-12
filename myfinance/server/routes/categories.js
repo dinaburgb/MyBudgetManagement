@@ -12,13 +12,57 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { recategorizeAll } from '../db/categorize.js'
+import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll } from '../db/categorize.js'
+import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
 
 const router = Router()
 
 router.use((req, res, next) => {
   if (!isUnlocked()) return res.status(401).json({ error: 'App is locked' })
   next()
+})
+
+// --- Manage the category list itself ---
+
+/** GET /api/categories — the full category list (id, name, color, is_system) */
+router.get('/', (req, res) => {
+  res.json(listCategories(getDb()))
+})
+
+/** POST /api/categories — add a custom category { name, color? } */
+router.post('/', (req, res) => {
+  try {
+    const { id } = addCategory(getDb(), req.body.name, req.body.color)
+    res.json({ id, message: 'Category added' })
+  } catch (err) {
+    if (err.code === 'EXISTS')  return res.status(409).json({ error: 'הקטגוריה כבר קיימת' })
+    if (err.code === 'INVALID') return res.status(400).json({ error: 'נדרש שם קטגוריה' })
+    res.status(500).json({ error: 'Could not add category' })
+  }
+})
+
+/** PUT /api/categories/:id — rename and/or recolor { name?, color? } */
+router.put('/:id', (req, res) => {
+  try {
+    updateCategory(getDb(), req.params.id, { name: req.body.name, color: req.body.color })
+    res.json({ message: 'Category updated' })
+  } catch (err) {
+    if (err.code === 'EXISTS')    return res.status(409).json({ error: 'הקטגוריה כבר קיימת' })
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: 'Category not found' })
+    res.status(500).json({ error: 'Could not update category' })
+  }
+})
+
+/** DELETE /api/categories/:id — delete and move its data to 'אחר' */
+router.delete('/:id', (req, res) => {
+  try {
+    deleteCategory(getDb(), req.params.id)
+    res.json({ message: 'Category deleted' })
+  } catch (err) {
+    if (err.code === 'SYSTEM')    return res.status(400).json({ error: 'לא ניתן למחוק קטגוריית מערכת' })
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: 'Category not found' })
+    res.status(500).json({ error: 'Could not delete category' })
+  }
 })
 
 /** GET /api/categories/rules — all rules, highest priority first */
@@ -38,10 +82,17 @@ router.post('/rules', (req, res) => {
     return res.status(400).json({ error: 'keyword and category are required' })
   }
   const db = getDb()
+  const kw = keyword.trim(), cat = category.trim()
   const result = db.prepare(
     `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
-  ).run(keyword.trim(), category.trim(), Number(priority) || 0)
-  res.json({ id: result.lastInsertRowid, message: 'Rule added' })
+  ).run(kw, cat, Number(priority) || 0)
+  // Apply the new rule to existing transactions right away. Default touches only
+  // uncategorized rows; 'all' overrides already-categorized matches too (used to
+  // pull charges into a category like רכב from wherever they currently sit).
+  const applied = req.body.applyMode === 'all'
+    ? applyKeywordToAll(db, kw, cat)
+    : applyRuleToUncategorized(db, kw, cat)
+  res.json({ id: result.lastInsertRowid, message: 'Rule added', applied })
 })
 
 /** DELETE /api/categories/rules/:id — remove a rule */
