@@ -66,6 +66,18 @@ CREATE TABLE IF NOT EXISTS category_rules (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- User-manageable list of categories. Seeded with a canonical Hebrew set on first
+-- run; the user can add, rename, recolor, or delete their own. 'אחר' is a system
+-- category (the catch-all) and cannot be deleted.
+CREATE TABLE IF NOT EXISTS categories (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  color      TEXT,                       -- hex color for charts
+  is_system  INTEGER NOT NULL DEFAULT 0, -- 1 = cannot be deleted (e.g. 'אחר')
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Latest balance per account/card, as of the last scrape ("balance on update day").
 -- One login (accounts row) can expose several account numbers, each with its own
 -- balance; we keep the most recent value per (account_id, account_number).

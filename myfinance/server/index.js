@@ -25,12 +25,15 @@ import categoriesRouter from './routes/categories.js'
 import budgetsRouter from './routes/budgets.js'
 import statsRouter from './routes/stats.js'
 import { seedDefaultRules, migrateCategoriesToHebrew } from './db/categorize.js'
+import { seedCategories } from './db/categories.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist')
 
 // --- Initialise ---
 openDatabase()
+// Seed the canonical category list on first run (no-op once categories exist).
+seedCategories()
 // Seed default auto-categorization rules on first run (no-op if rules exist).
 seedDefaultRules()
 // Convert any legacy English / scraper-Hebrew categories to our canonical Hebrew

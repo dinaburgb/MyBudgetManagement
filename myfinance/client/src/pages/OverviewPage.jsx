@@ -5,7 +5,8 @@ import {
 } from 'recharts'
 import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
-import { colorFor, ils } from '../colors.js'
+import { ils } from '../colors.js'
+import { useCategories } from '../CategoriesContext.jsx'
 
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -61,6 +62,7 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 export default function OverviewPage() {
+  const { colorFor } = useCategories()
   const monthChips = useMemo(() => recentMonths(18), [])           // newest first
   const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(6)))
   const [rangeFrom, setRangeFrom]     = useState('')

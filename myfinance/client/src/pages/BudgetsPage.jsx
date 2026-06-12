@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { ils, colorFor } from '../colors.js'
+import { ils } from '../colors.js'
+import { useCategories } from '../CategoriesContext.jsx'
 
 // Build a list of month options: 12 months back through 1 month ahead.
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -28,6 +29,7 @@ function barTone(ratio) {
 }
 
 function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
+  const { colorFor } = useCategories()
   const [value, setValue] = useState(row.limit ?? '')
   const [saving, setSaving] = useState(false)
 

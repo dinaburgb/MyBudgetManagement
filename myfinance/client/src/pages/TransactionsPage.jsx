@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Download } from 'lucide-react'
 import axios from 'axios'
-import { CATEGORIES } from '../categories.js'
+import { useCategories } from '../CategoriesContext.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -9,6 +9,7 @@ const SOURCE_LABELS = {
 }
 
 export default function TransactionsPage() {
+  const { names: CATEGORIES } = useCategories()
   const [rows,    setRows]    = useState([])
   const [total,   setTotal]   = useState(0)
   const [page,    setPage]    = useState(1)

@@ -10,6 +10,7 @@ import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth } from '../server/db/budgets.js'
+import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -24,6 +25,7 @@ function freshDb() {
   db.exec(SCHEMA_SQL)
   db.prepare(`INSERT INTO accounts (id, name, source, owner, credentials, include_in_totals) VALUES (?,?,?,?,?,1)`)
     .run(account.id, account.name, account.source, account.owner, 'x')
+  seedCategories(db)
   return db
 }
 

@@ -5,6 +5,7 @@ import TransactionsPage from './TransactionsPage.jsx'
 import CategoriesPage from './CategoriesPage.jsx'
 import BudgetsPage from './BudgetsPage.jsx'
 import OverviewPage from './OverviewPage.jsx'
+import { CategoriesProvider } from '../CategoriesContext.jsx'
 import axios from 'axios'
 
 const TABS = [
@@ -24,6 +25,7 @@ export default function Dashboard({ onLock }) {
   }
 
   return (
+    <CategoriesProvider>
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Top navigation bar */}
       <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
@@ -67,5 +69,6 @@ export default function Dashboard({ onLock }) {
         {activeTab === 'budgets'      && <BudgetsPage />}
       </main>
     </div>
+    </CategoriesProvider>
   )
 }
