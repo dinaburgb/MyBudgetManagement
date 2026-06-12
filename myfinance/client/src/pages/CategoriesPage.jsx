@@ -125,6 +125,7 @@ export default function CategoriesPage() {
   const [keyword,  setKeyword]  = useState('')
   const [category, setCategory] = useState('')
   const [adding,   setAdding]   = useState(false)
+  const [ruleMsg,  setRuleMsg]  = useState(null)
 
   // Re-categorize state
   const [recat,    setRecat]    = useState(false)
@@ -153,8 +154,13 @@ export default function CategoriesPage() {
     e.preventDefault()
     if (!keyword.trim() || !ruleCategory) return
     setAdding(true)
+    setRuleMsg(null)
     try {
-      await axios.post('/api/categories/rules', { keyword: keyword.trim(), category: ruleCategory })
+      const res = await axios.post('/api/categories/rules', { keyword: keyword.trim(), category: ruleCategory })
+      const applied = res.data.applied || 0
+      setRuleMsg(applied > 0
+        ? `הכלל נוסף — ${applied} תנועות קיימות סווגו ל"${ruleCategory}"`
+        : 'הכלל נוסף. הוא יחול על תנועות חדשות (לא נמצאו תנועות לא מסווגות תואמות).')
       setKeyword('')
       await load()
     } finally {
@@ -254,6 +260,10 @@ export default function CategoriesPage() {
             {adding ? 'מוסיף...' : 'הוסף'}
           </button>
         </div>
+        {ruleMsg && <p className="text-sm text-green-400 mt-3">{ruleMsg}</p>}
+        <p className="text-xs text-gray-500 mt-2">
+          כלל חדש מסווג מיד תנועות לא מסווגות שמתאימות, וגם יחול על תנועות עתידיות.
+        </p>
       </form>
 
       {/* Existing rules */}

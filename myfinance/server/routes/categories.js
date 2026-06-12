@@ -12,7 +12,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { recategorizeAll } from '../db/categorize.js'
+import { recategorizeAll, applyRuleToUncategorized } from '../db/categorize.js'
 import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
 
 const router = Router()
@@ -82,10 +82,14 @@ router.post('/rules', (req, res) => {
     return res.status(400).json({ error: 'keyword and category are required' })
   }
   const db = getDb()
+  const kw = keyword.trim(), cat = category.trim()
   const result = db.prepare(
     `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
-  ).run(keyword.trim(), category.trim(), Number(priority) || 0)
-  res.json({ id: result.lastInsertRowid, message: 'Rule added' })
+  ).run(kw, cat, Number(priority) || 0)
+  // Apply the new rule immediately to uncategorized transactions so the user
+  // sees the effect right away (does not override already-categorized rows).
+  const applied = applyRuleToUncategorized(db, kw, cat)
+  res.json({ id: result.lastInsertRowid, message: 'Rule added', applied })
 })
 
 /** DELETE /api/categories/rules/:id — remove a rule */

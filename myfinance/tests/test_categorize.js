@@ -10,7 +10,7 @@ import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import {
   loadRules, categorizeDescription, seedDefaultRules, recategorizeAll, DEFAULT_RULES,
-  normalizeCategory, migrateCategoriesToHebrew, OTHER_CATEGORY,
+  normalizeCategory, migrateCategoriesToHebrew, OTHER_CATEGORY, applyRuleToUncategorized,
 } from '../server/db/categorize.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 
@@ -185,6 +185,20 @@ test('migrateCategoriesToHebrew converts existing rows and is idempotent', () =>
 
   const again = migrateCategoriesToHebrew(db)
   assert.strictEqual(again, 0)  // idempotent
+})
+
+test('applyRuleToUncategorized categorizes matching אחר rows only', () => {
+  const db = freshDb()
+  // two uncategorized + one already categorized, all matching "רב קו"
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ description: 'רב קו תל אביב' }),
+    txn({ description: 'טעינת רב קו', chargedAmount: -50 }),
+    txn({ description: 'רב קו אחר', chargedAmount: -20, category: 'תחבורה' }),  // already set
+  ] }, db)
+  const n = applyRuleToUncategorized(db, 'רב קו', 'תחבורה')
+  assert.strictEqual(n, 2)  // only the two אחר rows moved; the pre-set one untouched
+  const cats = db.prepare(`SELECT COUNT(*) c FROM transactions WHERE category='תחבורה'`).get().c
+  assert.strictEqual(cats, 3)
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

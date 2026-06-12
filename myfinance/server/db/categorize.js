@@ -221,6 +221,23 @@ export function seedDefaultRules(db = getDb()) {
 }
 
 /**
+ * Apply a single new rule to existing UNCATEGORIZED ('אחר') transactions whose
+ * description contains the keyword. Used right after a rule is added so the user
+ * sees an immediate effect, without overriding categories already set manually
+ * or by another rule. Returns the number of transactions updated.
+ */
+export function applyRuleToUncategorized(db, keyword, category) {
+  if (!keyword) return 0
+  // LIKE is case-insensitive for ASCII in SQLite, and Hebrew has no case, so a
+  // plain substring match works for both. Escape LIKE wildcards in the keyword.
+  const safe = String(keyword).replace(/[\\%_]/g, ch => '\\' + ch)
+  return db.prepare(
+    `UPDATE transactions SET category = ?, updated_at = datetime('now')
+     WHERE category = ? AND description LIKE ? ESCAPE '\\'`
+  ).run(category, OTHER_CATEGORY, `%${safe}%`).changes
+}
+
+/**
  * Apply the current rules to existing transactions.
  *
  * @param {object}  db
