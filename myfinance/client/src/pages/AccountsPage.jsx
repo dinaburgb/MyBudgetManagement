@@ -200,9 +200,14 @@ export default function AccountsPage() {
 
   useEffect(() => { load() }, [])
 
-  async function handleDelete(id) {
-    if (!confirm('למחוק חשבון זה? התנועות שלו לא יימחקו.')) return
-    await axios.delete(`/api/accounts/${id}`)
+  // Which account is awaiting a delete/clean confirmation
+  const [confirmId, setConfirmId] = useState(null)
+
+  // Remove an account. withData=true also deletes its transactions & balances
+  // ("clean account"), so nothing from it appears anywhere.
+  async function removeAccount(id, withData) {
+    await axios.delete(`/api/accounts/${id}`, { params: withData ? { withData: 1 } : {} })
+    setConfirmId(null)
     load()
   }
 
@@ -329,7 +334,7 @@ export default function AccountsPage() {
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => handleDelete(acc.id)}
+                    onClick={() => setConfirmId(confirmId === acc.id ? null : acc.id)}
                     className="text-gray-400 hover:text-red-400 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -350,6 +355,38 @@ export default function AccountsPage() {
                   <span className="text-amber-500/80 text-xs">(לא נכלל)</span>
                 )}
               </label>
+
+              {/* Delete / clean confirmation */}
+              {confirmId === acc.id && (
+                <div className="mt-3 bg-gray-800 rounded-lg p-3">
+                  <p className="text-sm text-gray-300 mb-3">
+                    מה לעשות עם החשבון "{acc.name}"?
+                    {acc.txn_count > 0 && (
+                      <span className="text-gray-400"> ({acc.txn_count} תנועות שמורות)</span>
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => removeAccount(acc.id, true)}
+                      className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      נקה הכול{acc.txn_count > 0 ? ` (כולל ${acc.txn_count} תנועות)` : ''}
+                    </button>
+                    <button
+                      onClick={() => removeAccount(acc.id, false)}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      הסר חשבון בלבד (שמור תנועות)
+                    </button>
+                    <button
+                      onClick={() => setConfirmId(null)}
+                      className="text-gray-400 hover:text-white px-3 py-1.5 text-sm transition-colors"
+                    >
+                      ביטול
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Sync result message for this account */}
               {syncMsg?.id === acc.id && (

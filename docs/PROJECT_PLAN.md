@@ -74,6 +74,12 @@ Status of each bank / card integration:
   - `routes/stats.js` now accepts a months set and an accounts set, and returns
     netBalance. Tests: `tests/test_balances.js` (3). Full suite: 38 passing.
   - NOTE: balances populate on the NEXT sync of each account (re-run "עדכון").
+- **Clean account (2026-06-12):** deleting an account now offers two choices
+  (`server/db/accounts.js` `deleteAccount`): "remove account only" detaches its
+  transactions (account_id → NULL, kept as history, dropped from totals) and
+  removes its balances; "clean all" deletes the account, its transactions and
+  balances so nothing appears anywhere. UI: inline confirm with a transaction
+  count. Tests: `tests/test_accounts.js` (3). Full suite: 41 passing.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

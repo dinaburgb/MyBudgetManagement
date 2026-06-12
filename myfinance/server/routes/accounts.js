@@ -7,6 +7,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
 import { balancesByAccount } from '../db/balances.js'
+import { deleteAccount } from '../db/accounts.js'
 
 const router = Router()
 
@@ -22,7 +23,8 @@ router.use((req, res, next) => {
 router.get('/', (req, res) => {
   const db = getDb()
   const accounts = db.prepare(`
-    SELECT id, name, source, owner, last_scraped, enabled, include_in_totals, created_at
+    SELECT id, name, source, owner, last_scraped, enabled, include_in_totals, created_at,
+           (SELECT COUNT(*) FROM transactions t WHERE t.account_id = accounts.id) AS txn_count
     FROM accounts ORDER BY source, owner
   `).all()
   // Attach the latest known balance per account (null when unknown, e.g. cards).
@@ -91,11 +93,21 @@ router.put('/:id', (req, res) => {
   res.json({ message: 'Account updated' })
 })
 
-/** DELETE /api/accounts/:id — remove an account */
+/**
+ * DELETE /api/accounts/:id — remove an account.
+ * By default keeps the account's transactions (they stay as history).
+ * With ?withData=1 it also deletes the account's transactions and balances,
+ * so nothing from this account appears anywhere ("clean account").
+ */
 router.delete('/:id', (req, res) => {
   const db = getDb()
-  db.prepare(`DELETE FROM accounts WHERE id = ?`).run(req.params.id)
-  res.json({ message: 'Account deleted' })
+  const withData = req.query.withData === '1' || req.query.withData === 'true'
+  try {
+    const { deletedTransactions } = deleteAccount(db, req.params.id, withData)
+    res.json({ message: withData ? 'Account cleaned' : 'Account deleted', deletedTransactions })
+  } catch {
+    res.status(500).json({ error: 'Could not delete account' })
+  }
 })
 
 // NOTE: There is deliberately NO endpoint that returns decrypted credentials.
