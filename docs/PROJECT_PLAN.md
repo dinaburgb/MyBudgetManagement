@@ -62,9 +62,22 @@ Status of each bank / card integration:
     expenses-by-category donut, and KPI cards. Backed by `routes/stats.js`.
   - Tests: `tests/test_budgets.js` (8 tests). Full suite: 35 passing.
 
+- **Flexible Overview + account balances (2026-06-12):**
+  - Overview period selection is now flexible: quick ranges (3/6/12/this year),
+    a from→to range picker, and arbitrary month chips (multi-select set).
+  - Account selection on the Overview is per-view (checkboxes), independent of the
+    persistent include_in_totals flag.
+  - Scrape and store the balance "as of update day" per account/card
+    (`account_balances` table, `server/db/balances.js`). Banks return a real
+    balance; cards store null. Shown per account on the Accounts page and as a
+    "current net balance" KPI on the Overview.
+  - `routes/stats.js` now accepts a months set and an accounts set, and returns
+    netBalance. Tests: `tests/test_balances.js` (3). Full suite: 38 passing.
+  - NOTE: balances populate on the NEXT sync of each account (re-run "עדכון").
+
 ## Next steps
+- Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero, Isracard, Max) against real accounts
 - Let the user grow their own rule set from the real "אחר" transactions in Cal
-  (most spending is still uncategorized — add merchant rules, then re-categorize)
 - Code-split the client bundle (recharts pushed it past 500 kB)
 - Optional: budget vs. actual on the Overview dashboard

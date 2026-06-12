@@ -1,17 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   PieChart, Pie, Cell,
 } from 'recharts'
-import { TrendingUp, TrendingDown, Scale } from 'lucide-react'
+import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
 import { colorFor, ils } from '../colors.js'
 
-// Hebrew month label for a 'YYYY-MM' key, e.g. '2026-06' → 'יוני 26'
-const HE_MONTHS = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
-function monthLabel(key) {
-  const [y, m] = key.split('-')
-  return `${HE_MONTHS[Number(m) - 1]} ${y.slice(2)}`
+const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
+const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
+
+function monthShort(key) { const [y, m] = key.split('-'); return `${HE_SHORT[+m - 1]} ${y.slice(2)}` }
+function monthLong(key)  { const [y, m] = key.split('-'); return `${HE_LONG[+m - 1]} ${y}` }
+
+// Build the last `n` month keys, newest first.
+function recentMonths(n) {
+  const out = []
+  const d = new Date()
+  for (let i = 0; i < n; i++) {
+    const m = new Date(d.getFullYear(), d.getMonth() - i, 1)
+    out.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return out
 }
 
 function Kpi({ icon: Icon, label, value, tone }) {
@@ -19,21 +29,21 @@ function Kpi({ icon: Icon, label, value, tone }) {
     green: 'text-green-400 bg-green-500/10',
     red:   'text-red-400 bg-red-500/10',
     blue:  'text-blue-400 bg-blue-500/10',
+    violet:'text-violet-400 bg-violet-500/10',
   }
   return (
-    <div className="bg-gray-900 rounded-xl p-5 flex items-center gap-4">
-      <div className={`w-11 h-11 rounded-lg flex items-center justify-center ${tones[tone]}`}>
+    <div className="bg-gray-900 rounded-xl p-4 flex items-center gap-3">
+      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${tones[tone]}`}>
         <Icon className="w-5 h-5" />
       </div>
-      <div>
-        <div className="text-gray-400 text-sm">{label}</div>
-        <div className="text-xl font-bold text-white font-mono">{value}</div>
+      <div className="min-w-0">
+        <div className="text-gray-400 text-xs">{label}</div>
+        <div className="text-lg font-bold text-white font-mono truncate">{value}</div>
       </div>
     </div>
   )
 }
 
-// Dark tooltip shared by the charts
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
@@ -51,51 +61,150 @@ function ChartTooltip({ active, payload, label }) {
 }
 
 export default function OverviewPage() {
+  const monthChips = useMemo(() => recentMonths(18), [])           // newest first
+  const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(6)))
+  const [rangeFrom, setRangeFrom]     = useState('')
+  const [rangeTo, setRangeTo]         = useState('')
+  const [accounts, setAccounts]       = useState([])
+  const [selAccounts, setSelAccounts] = useState(null)            // Set of ids, null until loaded
   const [data, setData]   = useState(null)
-  const [months, setMonths] = useState(6)
   const [loading, setLoading] = useState(true)
 
+  // Load accounts and default the selection to those included in totals.
   useEffect(() => {
+    axios.get('/api/accounts').then(res => {
+      setAccounts(res.data)
+      setSelAccounts(new Set(res.data.filter(a => a.include_in_totals).map(a => a.id)))
+    }).catch(() => { setAccounts([]); setSelAccounts(new Set()) })
+  }, [])
+
+  // Fetch stats whenever the month or account selection changes.
+  useEffect(() => {
+    if (selAccounts === null) return
     setLoading(true)
-    axios.get('/api/stats/overview', { params: { months } })
+    const months = [...selMonths].sort().join(',')
+    const acc = [...selAccounts].join(',')
+    axios.get('/api/stats/overview', { params: { months, accounts: acc } })
       .then(res => setData(res.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [months])
+  }, [selMonths, selAccounts])
 
-  if (loading) return <div className="text-gray-400">טוען נתונים...</div>
-  if (!data) return <div className="text-gray-500">לא ניתן לטעון נתונים.</div>
+  function toggleMonth(key) {
+    setSelMonths(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+  function quick(n) { setSelMonths(new Set(recentMonths(n))); setRangeFrom(''); setRangeTo('') }
+  function thisYear() {
+    const y = new Date().getFullYear()
+    setSelMonths(new Set(monthChips.filter(m => m.startsWith(`${y}-`))))
+    setRangeFrom(''); setRangeTo('')
+  }
+  // Apply a contiguous from→to range over the available chips.
+  function applyRange(from, to) {
+    if (!from || !to) return
+    const [lo, hi] = from <= to ? [from, to] : [to, from]
+    setSelMonths(new Set(monthChips.filter(m => m >= lo && m <= hi)))
+  }
+  function toggleAccount(id) {
+    setSelAccounts(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
-  const monthly = data.monthly.map(m => ({ ...m, label: monthLabel(m.month) }))
-  const pie = data.byCategory.map(c => ({ name: c.category, value: c.expenses }))
-  const hasData = data.totals.expenses > 0 || data.totals.income > 0
+  const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
+  const pie = (data?.byCategory || []).map(c => ({ name: c.category, value: c.expenses }))
+  const hasData = data && (data.totals.expenses > 0 || data.totals.income > 0)
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-white">סקירה כללית</h2>
-        <select
-          value={months}
-          onChange={e => setMonths(Number(e.target.value))}
-          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value={3}>3 חודשים אחרונים</option>
-          <option value={6}>6 חודשים אחרונים</option>
-          <option value={12}>12 חודשים אחרונים</option>
-        </select>
+      <h2 className="text-xl font-bold text-white mb-4">סקירה כללית</h2>
+
+      {/* Controls */}
+      <div className="bg-gray-900 rounded-xl p-4 mb-6 space-y-4">
+        {/* Period */}
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="text-sm text-gray-400 ml-1">תקופה:</span>
+            <button onClick={() => quick(3)}  className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200">3 ח'</button>
+            <button onClick={() => quick(6)}  className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200">6 ח'</button>
+            <button onClick={() => quick(12)} className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200">12 ח'</button>
+            <button onClick={thisYear}        className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200">השנה</button>
+            {/* Range from–to */}
+            <span className="text-gray-600 mx-1">|</span>
+            <span className="text-xs text-gray-500">טווח:</span>
+            <select value={rangeFrom} onChange={e => { setRangeFrom(e.target.value); applyRange(e.target.value, rangeTo) }}
+              className="bg-gray-800 text-white rounded-lg px-2 py-1 text-xs outline-none">
+              <option value="">מ…</option>
+              {monthChips.map(m => <option key={m} value={m}>{monthLong(m)}</option>)}
+            </select>
+            <span className="text-xs text-gray-500">עד</span>
+            <select value={rangeTo} onChange={e => { setRangeTo(e.target.value); applyRange(rangeFrom, e.target.value) }}
+              className="bg-gray-800 text-white rounded-lg px-2 py-1 text-xs outline-none">
+              <option value="">…עד</option>
+              {monthChips.map(m => <option key={m} value={m}>{monthLong(m)}</option>)}
+            </select>
+          </div>
+          {/* Month chips (arbitrary set) */}
+          <div className="flex flex-wrap gap-1.5">
+            {monthChips.map(m => {
+              const on = selMonths.has(m)
+              return (
+                <button
+                  key={m}
+                  onClick={() => toggleMonth(m)}
+                  className={`px-2 py-1 rounded-md text-xs transition-colors ${
+                    on ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {monthShort(m)}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Accounts */}
+        {accounts.length > 0 && (
+          <div>
+            <div className="text-sm text-gray-400 mb-2">חשבונות בסקירה:</div>
+            <div className="flex flex-wrap gap-3">
+              {accounts.map(a => (
+                <label key={a.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!selAccounts?.has(a.id)}
+                    onChange={() => toggleAccount(a.id)}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  {a.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      {!hasData ? (
-        <div className="text-center py-20 text-gray-500">
-          אין עדיין נתונים. סנכרן חשבונות כדי לראות גרפים.
-        </div>
+      {/* Body */}
+      {loading ? (
+        <div className="text-gray-400">טוען נתונים...</div>
+      ) : selMonths.size === 0 ? (
+        <div className="text-center py-16 text-gray-500">בחר לפחות חודש אחד.</div>
+      ) : !hasData ? (
+        <div className="text-center py-16 text-gray-500">אין נתונים לבחירה הזו.</div>
       ) : (
         <>
           {/* KPI cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <Kpi icon={TrendingUp}   label="הכנסות בתקופה"  value={ils(data.totals.income)}   tone="green" />
-            <Kpi icon={TrendingDown} label="הוצאות בתקופה"  value={ils(data.totals.expenses)} tone="red" />
-            <Kpi icon={Scale}        label="מאזן"           value={ils(data.totals.balance)}  tone="blue" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <Kpi icon={TrendingUp}   label="הכנסות בתקופה" value={ils(data.totals.income)}   tone="green" />
+            <Kpi icon={TrendingDown} label="הוצאות בתקופה" value={ils(data.totals.expenses)} tone="red" />
+            <Kpi icon={Scale}        label="מאזן התקופה"   value={ils(data.totals.balance)}  tone="blue" />
+            <Kpi icon={Wallet}       label="יתרה נוכחית"   value={ils(data.netBalance)}      tone="violet" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -121,10 +230,8 @@ export default function OverviewPage() {
               <h3 className="text-white font-medium mb-4">הוצאות לפי קטגוריה</h3>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
-                  <Pie
-                    data={pie} dataKey="value" nameKey="name"
-                    cx="50%" cy="50%" innerRadius={62} outerRadius={100} paddingAngle={2}
-                  >
+                  <Pie data={pie} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                       innerRadius={62} outerRadius={100} paddingAngle={2}>
                     {pie.map(entry => <Cell key={entry.name} fill={colorFor(entry.name)} stroke="#111827" />)}
                   </Pie>
                   <Tooltip content={<ChartTooltip />} />

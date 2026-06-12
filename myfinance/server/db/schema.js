@@ -66,6 +66,19 @@ CREATE TABLE IF NOT EXISTS category_rules (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Latest balance per account/card, as of the last scrape ("balance on update day").
+-- One login (accounts row) can expose several account numbers, each with its own
+-- balance; we keep the most recent value per (account_id, account_number).
+-- Banks return a real balance; credit cards usually return null here.
+CREATE TABLE IF NOT EXISTS account_balances (
+  account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  balance        REAL,
+  balance_date   TEXT,                      -- scrape time (ISO) the balance is from
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, account_number)
+);
+
 -- Monthly budget limits per category.
 -- month = '' means a recurring default that applies to every month; a specific
 -- 'YYYY-MM' row overrides the default for that one month.

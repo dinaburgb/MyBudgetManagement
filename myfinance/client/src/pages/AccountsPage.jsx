@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw } from 'lucide-react'
 import axios from 'axios'
+import { ils } from '../colors.js'
 
 const SOURCES = [
   'hapoalim', 'discount', 'fibi', 'mizrahi', 'onezero',
@@ -290,7 +291,14 @@ export default function AccountsPage() {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-white">{acc.name}</div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-white">{acc.name}</span>
+                    {acc.balance != null && (
+                      <span className={`font-mono text-sm ${acc.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        יתרה: {ils(acc.balance)}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-sm text-gray-400 mt-0.5">
                     {SOURCE_LABELS[acc.source]} · {acc.owner}
                     {acc.last_scraped && (

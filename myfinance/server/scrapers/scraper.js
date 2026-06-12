@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { decrypt } from '../crypto/encryption.js'
 import { getDb, backupDatabase, logActivity } from '../db/database.js'
 import { saveAccountTransactions } from '../db/save-transactions.js'
+import { upsertBalance } from '../db/balances.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LOGS_DIR = path.join(__dirname, '..', '..', 'logs')
@@ -125,14 +126,21 @@ export async function scrapeAccount(account) {
   // accounts or cards — we save them all and report a per-account breakdown.
   const stats = { inserted: 0, updated: 0, skipped: 0 }
   const breakdown = []
+  const nowISO = new Date().toISOString()
+  const db = getDb()
   for (const scrapedAccount of result.accounts || []) {
     const s = saveAccountTransactions(account, scrapedAccount)
     stats.inserted += s.inserted
     stats.updated  += s.updated
     stats.skipped  += s.skipped
+    // Store the balance "as of update day" for this account/card. Banks provide a
+    // real balance; credit cards typically return undefined → stored as null.
+    upsertBalance(db, account.id, scrapedAccount.accountNumber,
+      scrapedAccount.balance ?? null, nowISO)
     breakdown.push({
       accountNumber: scrapedAccount.accountNumber,
       total: (scrapedAccount.txns || []).length,
+      balance: scrapedAccount.balance ?? null,
       ...s,
     })
   }

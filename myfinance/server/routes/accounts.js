@@ -6,6 +6,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
+import { balancesByAccount } from '../db/balances.js'
 
 const router = Router()
 
@@ -24,6 +25,13 @@ router.get('/', (req, res) => {
     SELECT id, name, source, owner, last_scraped, enabled, include_in_totals, created_at
     FROM accounts ORDER BY source, owner
   `).all()
+  // Attach the latest known balance per account (null when unknown, e.g. cards).
+  const balances = balancesByAccount(db)
+  for (const a of accounts) {
+    const b = balances.get(a.id)
+    a.balance = b ? b.balance : null
+    a.balance_date = b ? b.balance_date : null
+  }
   res.json(accounts)
 })
 
