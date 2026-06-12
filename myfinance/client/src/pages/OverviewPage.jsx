@@ -64,7 +64,7 @@ function ChartTooltip({ active, payload, label }) {
 export default function OverviewPage() {
   const { colorFor } = useCategories()
   const monthChips = useMemo(() => recentMonths(18), [])           // newest first
-  const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(6)))
+  const [selMonths, setSelMonths]     = useState(() => new Set(recentMonths(1)))
   const [rangeFrom, setRangeFrom]     = useState('')
   const [rangeTo, setRangeTo]         = useState('')
   const [accounts, setAccounts]       = useState([])

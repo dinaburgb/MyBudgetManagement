@@ -221,6 +221,40 @@ export default function AccountsPage() {
   const [syncingId, setSyncingId] = useState(null)
   const [syncMsg, setSyncMsg]     = useState(null)
 
+  // Bulk selection / sync
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulk, setBulk] = useState(null)   // { current, total, name } while running, or summary
+
+  const allSelected = accounts.length > 0 && selectedIds.size === accounts.length
+  function toggleSelect(id) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(accounts.map(a => a.id)))
+  }
+
+  // Sync every selected account, one after another (each may open a browser / OTP).
+  async function syncSelected() {
+    const ids = accounts.filter(a => selectedIds.has(a.id)).map(a => a.id)
+    if (ids.length === 0) return
+    const totals = { inserted: 0, updated: 0, skipped: 0, failed: 0 }
+    for (let i = 0; i < ids.length; i++) {
+      const acc = accounts.find(a => a.id === ids[i])
+      setBulk({ current: i + 1, total: ids.length, name: acc?.name })
+      try {
+        const res = await axios.post(`/api/scrape/account/${ids[i]}`)
+        const s = res.data.stats || {}
+        totals.inserted += s.inserted || 0
+        totals.updated  += s.updated  || 0
+        totals.skipped  += s.skipped  || 0
+      } catch {
+        totals.failed += 1
+      }
+    }
+    setBulk({ done: true, ...totals, count: ids.length })
+    load()
+  }
+
   // Toggle whether this account is included in totals/summaries
   async function toggleInTotals(acc) {
     const next = acc.include_in_totals ? 0 : 1
@@ -288,6 +322,32 @@ export default function AccountsPage() {
           <p>אין עדיין חשבונות. לחץ על "הוספת חשבון" כדי להתחיל.</p>
         </div>
       ) : (
+       <>
+        {/* Bulk toolbar: select all + update selected */}
+        <div className="flex flex-wrap items-center gap-3 mb-3 bg-gray-900 rounded-xl px-4 py-3">
+          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="w-4 h-4 accent-blue-600" />
+            בחר הכל
+          </label>
+          <button
+            onClick={syncSelected}
+            disabled={selectedIds.size === 0 || (bulk && !bulk.done)}
+            className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${bulk && !bulk.done ? 'animate-spin' : ''}`} />
+            עדכן נבחרים ({selectedIds.size})
+          </button>
+          {bulk && !bulk.done && (
+            <span className="text-sm text-gray-400">מסנכרן {bulk.current}/{bulk.total}: {bulk.name}…</span>
+          )}
+          {bulk && bulk.done && (
+            <span className="text-sm text-green-400">
+              הסתיים — {bulk.count} חשבונות, {bulk.inserted} חדשות
+              {bulk.failed > 0 && <span className="text-red-400"> ({bulk.failed} נכשלו)</span>}
+            </span>
+          )}
+        </div>
+
         <div className="space-y-3">
           {accounts.map(acc => (
             <div
@@ -295,7 +355,14 @@ export default function AccountsPage() {
               className="bg-gray-900 rounded-xl p-4"
             >
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(acc.id)}
+                    onChange={() => toggleSelect(acc.id)}
+                    className="w-4 h-4 mt-1 accent-blue-600"
+                  />
+                  <div>
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-white">{acc.name}</span>
                     {acc.balance != null && (
@@ -311,6 +378,7 @@ export default function AccountsPage() {
                         סונכרן לאחרונה: {new Date(acc.last_scraped).toLocaleString('he-IL')}
                       </span>
                     )}
+                  </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -415,6 +483,7 @@ export default function AccountsPage() {
             </div>
           ))}
         </div>
+       </>
       )}
     </div>
   )
