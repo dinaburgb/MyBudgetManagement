@@ -7,6 +7,7 @@ import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
+import NoteEditor from '../NoteEditor.jsx'
 
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -134,6 +135,9 @@ export default function OverviewPage() {
       .catch(() => setDrill({ category, rows: [] }))
       .finally(() => setDrillLoading(false))
   }
+  function updateDrillNote(id, note) {
+    setDrill(d => d && ({ ...d, rows: d.rows.map(r => r.id === id ? { ...r, note } : r) }))
+  }
 
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
   const pie = (data?.byCategory || []).map(c => ({ name: c.category, value: c.expenses }))
@@ -190,7 +194,17 @@ export default function OverviewPage() {
         {/* Accounts */}
         {accounts.length > 0 && (
           <div>
-            <div className="text-sm text-gray-400 mb-2">חשבונות בסקירה:</div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-sm text-gray-400">חשבונות בסקירה:</span>
+              <button
+                onClick={() => setSelAccounts(new Set(accounts.map(a => a.id)))}
+                className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200"
+              >בחר הכל</button>
+              <button
+                onClick={() => setSelAccounts(new Set())}
+                className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200"
+              >נקה הכל</button>
+            </div>
             <div className="flex flex-wrap gap-3">
               {accounts.map(a => (
                 <label key={a.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
@@ -291,6 +305,9 @@ export default function OverviewPage() {
                               </span>
                             )}
                             <span className="text-gray-600 text-xs"> · {r.account_name}</span>
+                            <div className="mt-1">
+                              <NoteEditor id={r.id} note={r.note} onSaved={n => updateDrillNote(r.id, n)} />
+                            </div>
                           </td>
                           <td className={`py-2 text-left font-mono whitespace-nowrap align-top ${r.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
                             {r.amount < 0 ? '-' : '+'}{ils(Math.abs(r.amount))}

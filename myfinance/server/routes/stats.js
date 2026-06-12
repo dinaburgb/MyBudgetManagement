@@ -126,7 +126,7 @@ router.get('/transactions', (req, res) => {
   const aP = accountIds.map(() => '?').join(',')
   const rows = db.prepare(`
     SELECT id, date, description, amount, category, account_name, source,
-           type, installment_number, installment_total
+           type, installment_number, installment_total, note
     FROM transactions
     WHERE category = ?
       AND substr(date, 1, 7) IN (${mP})

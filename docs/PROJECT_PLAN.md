@@ -80,6 +80,13 @@ Status of each bank / card integration:
   removes its balances; "clean all" deletes the account, its transactions and
   balances so nothing appears anywhere. UI: inline confirm with a transaction
   count. Tests: `tests/test_accounts.js` (3). Full suite: 41 passing.
+- **Transaction notes (2026-06-12):** every transaction now has an optional
+  user note (`transactions.note` column, added by migration). Editable inline
+  from two places via a shared `client/src/NoteEditor.jsx`: the Transactions
+  table (new "הערה" column) and the Overview pie drill-down list. Saved through
+  `PUT /api/transactions/:id/note`; also included in the CSV export. Category
+  rename was already available on the Categories page (pencil icon), and it
+  propagates to transactions, rules and budgets.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

@@ -55,7 +55,7 @@ router.get('/', (req, res) => {
 
   const rows = db.prepare(`
     SELECT id, external_id, date, processed_date, amount, original_currency,
-           charged_amount, charged_currency, description, memo, category,
+           charged_amount, charged_currency, description, memo, note, category,
            owner, account_id, account_name, source, card_last4, type,
            installment_number, installment_total, status
     FROM transactions
@@ -78,20 +78,31 @@ router.put('/:id/category', (req, res) => {
   res.json({ message: 'Category updated' })
 })
 
+/** PUT /api/transactions/:id/note — set or clear the user's free-text note */
+router.put('/:id/note', (req, res) => {
+  const note = String(req.body?.note ?? '').slice(0, 1000)
+  const db = getDb()
+  db.prepare(
+    `UPDATE transactions SET note = ?, updated_at = datetime('now') WHERE id = ?`
+  ).run(note, req.params.id)
+  res.json({ message: 'Note updated', note })
+})
+
 /** GET /api/transactions/export/csv — download all as CSV */
 router.get('/export/csv', (req, res) => {
   const db = getDb()
   const rows = db.prepare(`
     SELECT date, description, amount, original_currency, category, owner,
-           source, account_name, card_last4, status
+           source, account_name, card_last4, status, note
     FROM transactions ORDER BY date DESC
   `).all()
 
-  const header = 'date,description,amount,currency,category,owner,source,account,card,status\n'
+  const header = 'date,description,amount,currency,category,owner,source,account,card,status,note\n'
   const csv = rows.map(r =>
     [r.date, `"${(r.description || '').replace(/"/g, '""')}"`,
      r.amount, r.original_currency, r.category, r.owner,
-     r.source, r.account_name, r.card_last4, r.status].join(',')
+     r.source, r.account_name, r.card_last4, r.status,
+     `"${(r.note || '').replace(/"/g, '""')}"`].join(',')
   ).join('\n')
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
