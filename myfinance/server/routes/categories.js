@@ -1,0 +1,86 @@
+/**
+ * Categories API — manage auto-categorization rules and apply them.
+ *
+ *   GET    /api/categories/rules         list all rules
+ *   POST   /api/categories/rules         add a rule { keyword, category, priority? }
+ *   DELETE /api/categories/rules/:id     delete a rule
+ *   POST   /api/categories/recategorize  apply rules to existing transactions
+ *                                        body { mode: 'other' | 'all' } (default 'other')
+ *   GET    /api/categories/summary       per-category totals (count + summed amount)
+ */
+
+import { Router } from 'express'
+import { getDb } from '../db/database.js'
+import { isUnlocked } from '../crypto/encryption.js'
+import { recategorizeAll } from '../db/categorize.js'
+
+const router = Router()
+
+router.use((req, res, next) => {
+  if (!isUnlocked()) return res.status(401).json({ error: 'App is locked' })
+  next()
+})
+
+/** GET /api/categories/rules — all rules, highest priority first */
+router.get('/rules', (req, res) => {
+  const db = getDb()
+  const rules = db.prepare(
+    `SELECT id, keyword, category, priority, created_at
+     FROM category_rules ORDER BY priority DESC, category, keyword`
+  ).all()
+  res.json(rules)
+})
+
+/** POST /api/categories/rules — add a new rule */
+router.post('/rules', (req, res) => {
+  const { keyword, category, priority } = req.body
+  if (!keyword || !category) {
+    return res.status(400).json({ error: 'keyword and category are required' })
+  }
+  const db = getDb()
+  const result = db.prepare(
+    `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
+  ).run(keyword.trim(), category.trim(), Number(priority) || 0)
+  res.json({ id: result.lastInsertRowid, message: 'Rule added' })
+})
+
+/** DELETE /api/categories/rules/:id — remove a rule */
+router.delete('/rules/:id', (req, res) => {
+  const db = getDb()
+  db.prepare(`DELETE FROM category_rules WHERE id = ?`).run(req.params.id)
+  res.json({ message: 'Rule deleted' })
+})
+
+/**
+ * POST /api/categories/recategorize — apply the current rules to existing
+ * transactions. mode 'other' (default) only touches uncategorized rows so manual
+ * choices are kept; mode 'all' re-evaluates every transaction.
+ */
+router.post('/recategorize', (req, res) => {
+  const mode = req.body?.mode === 'all' ? 'all' : 'other'
+  const result = recategorizeAll(getDb(), { onlyOther: mode === 'other' })
+  res.json({ message: 'Re-categorization complete', mode, ...result })
+})
+
+/** GET /api/categories/summary — count and total amount per category */
+router.get('/summary', (req, res) => {
+  const db = getDb()
+  // Only count transactions from accounts marked as included in totals. An
+  // account excluded by the user (e.g. a separate/relative's account) is left
+  // out of the summary entirely.
+  const rows = db.prepare(`
+    SELECT t.category,
+           COUNT(*)                                     AS count,
+           SUM(t.amount)                                AS total,
+           SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END) AS expenses,
+           SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END) AS income
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.include_in_totals = 1
+    GROUP BY t.category
+    ORDER BY expenses ASC
+  `).all()
+  res.json(rows)
+})
+
+export default router

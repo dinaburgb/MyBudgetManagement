@@ -12,6 +12,7 @@
 
 import crypto from 'node:crypto'
 import { getDb } from './database.js'
+import { loadRules, categorizeDescription, normalizeCategory, OTHER_CATEGORY } from './categorize.js'
 
 /**
  * Normalize a description for hashing:
@@ -60,6 +61,10 @@ export function computeContentHash(source, accountNumber, dateYMD, amount, descr
 export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
   const db = dbOverride || getDb()
   const { accountNumber, txns = [] } = scrapedAccount
+
+  // Load auto-categorization rules once for this whole import. Applied below
+  // only when the scraper itself didn't already provide a category.
+  const rules = loadRules(db)
 
   // Prepared statements (reused in the loop for speed)
   const findStmt = db.prepare(`SELECT id, status FROM transactions WHERE dedup_key = ?`)
@@ -130,7 +135,11 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
         charged_currency: txn.chargedCurrency || 'ILS',
         description: txn.description || '',
         memo: txn.memo || '',
-        category: txn.category || 'Other',
+        // Prefer the scraper's own category (normalized to our Hebrew set), then
+        // our keyword rules, then the catch-all.
+        category: (txn.category ? normalizeCategory(txn.category) : null)
+          || categorizeDescription(txn.description, rules)
+          || OTHER_CATEGORY,
         owner: account.owner,
         account_id: account.id,
         account_number: accountNumber,

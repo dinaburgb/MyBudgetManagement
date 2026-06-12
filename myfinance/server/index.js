@@ -21,12 +21,20 @@ import { deriveKey, isUnlocked, verifyPassword, savePasswordSentinel, clearKey }
 import accountsRouter from './routes/accounts.js'
 import transactionsRouter from './routes/transactions.js'
 import scrapeRouter from './routes/scrape.js'
+import categoriesRouter from './routes/categories.js'
+import { seedDefaultRules, migrateCategoriesToHebrew } from './db/categorize.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = path.join(__dirname, '..', 'client', 'dist')
 
 // --- Initialise ---
 openDatabase()
+// Seed default auto-categorization rules on first run (no-op if rules exist).
+seedDefaultRules()
+// Convert any legacy English / scraper-Hebrew categories to our canonical Hebrew
+// set (idempotent — does nothing once everything is already canonical).
+const migratedCats = migrateCategoriesToHebrew()
+if (migratedCats > 0) console.log(`Migration: normalized ${migratedCats} category value(s) to Hebrew`)
 
 const app    = express()
 const server = createServer(app)
@@ -101,6 +109,7 @@ app.post('/api/auth/lock', (req, res) => {
 app.use('/api/accounts',     accountsRouter)
 app.use('/api/transactions', transactionsRouter)
 app.use('/api/scrape',       scrapeRouter)
+app.use('/api/categories',   categoriesRouter)
 
 // --- Fallback: serve React for all non-API routes ---
 app.get('*', (req, res) => {

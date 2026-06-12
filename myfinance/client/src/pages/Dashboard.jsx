@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { LogOut, Building2, List, BarChart2 } from 'lucide-react'
+import { LogOut, Building2, List, BarChart2, Tag } from 'lucide-react'
 import AccountsPage from './AccountsPage.jsx'
 import TransactionsPage from './TransactionsPage.jsx'
+import CategoriesPage from './CategoriesPage.jsx'
 import axios from 'axios'
 
 const TABS = [
   { id: 'accounts',     label: 'Accounts',     icon: Building2 },
   { id: 'transactions', label: 'Transactions',  icon: List },
+  { id: 'categories',   label: 'Categories',    icon: Tag },
   { id: 'dashboard',    label: 'Dashboard',     icon: BarChart2 },
 ]
 
@@ -57,6 +59,7 @@ export default function Dashboard({ onLock }) {
       <main className="p-6">
         {activeTab === 'accounts'     && <AccountsPage />}
         {activeTab === 'transactions' && <TransactionsPage />}
+        {activeTab === 'categories'   && <CategoriesPage />}
         {activeTab === 'dashboard'    && (
           <div className="text-gray-400 text-center py-20">
             Dashboard charts coming in Phase 6

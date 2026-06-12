@@ -218,6 +218,18 @@ export default function AccountsPage() {
   const [syncingId, setSyncingId] = useState(null)
   const [syncMsg, setSyncMsg]     = useState(null)  // { id, text, ok }
 
+  // Toggle whether this account is included in totals/summaries
+  async function toggleInTotals(acc) {
+    const next = acc.include_in_totals ? 0 : 1
+    // optimistic update
+    setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, include_in_totals: next } : a))
+    try {
+      await axios.put(`/api/accounts/${acc.id}`, { include_in_totals: next })
+    } catch {
+      load()  // revert on failure
+    }
+  }
+
   async function handleSync(acc) {
     setSyncingId(acc.id)
     setSyncMsg(null)
@@ -320,6 +332,20 @@ export default function AccountsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Include-in-totals toggle */}
+              <label className="flex items-center gap-2 mt-3 text-sm text-gray-400 cursor-pointer select-none w-fit">
+                <input
+                  type="checkbox"
+                  checked={!!acc.include_in_totals}
+                  onChange={() => toggleInTotals(acc)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                Include in totals & summaries
+                {!acc.include_in_totals && (
+                  <span className="text-amber-500/80 text-xs">(excluded)</span>
+                )}
+              </label>
 
               {/* Sync result message for this account */}
               {syncMsg?.id === acc.id && (
