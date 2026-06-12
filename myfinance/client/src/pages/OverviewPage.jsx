@@ -194,7 +194,17 @@ export default function OverviewPage() {
         {/* Accounts */}
         {accounts.length > 0 && (
           <div>
-            <div className="text-sm text-gray-400 mb-2">חשבונות בסקירה:</div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-sm text-gray-400">חשבונות בסקירה:</span>
+              <button
+                onClick={() => setSelAccounts(new Set(accounts.map(a => a.id)))}
+                className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200"
+              >בחר הכל</button>
+              <button
+                onClick={() => setSelAccounts(new Set())}
+                className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200"
+              >נקה הכל</button>
+            </div>
             <div className="flex flex-wrap gap-3">
               {accounts.map(a => (
                 <label key={a.id} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
