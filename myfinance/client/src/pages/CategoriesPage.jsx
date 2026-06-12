@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Tag, Wand2 } from 'lucide-react'
 import axios from 'axios'
 import { CATEGORIES } from '../categories.js'
+import { ils } from '../colors.js'
 
 export default function CategoriesPage() {
   const [rules,   setRules]   = useState([])
@@ -10,7 +11,7 @@ export default function CategoriesPage() {
 
   // New-rule form state
   const [keyword,  setKeyword]  = useState('')
-  const [category, setCategory] = useState('Groceries')
+  const [category, setCategory] = useState(CATEGORIES[0])
   const [adding,   setAdding]   = useState(false)
 
   // Re-categorize state
@@ -57,29 +58,29 @@ export default function CategoriesPage() {
     setRecatMsg(null)
     try {
       const res = await axios.post('/api/categories/recategorize', { mode })
-      setRecatMsg(`Updated ${res.data.updated} of ${res.data.scanned} transactions`)
+      setRecatMsg(`עודכנו ${res.data.updated} מתוך ${res.data.scanned} תנועות`)
       await load()
     } catch {
-      setRecatMsg('Re-categorization failed')
+      setRecatMsg('הסיווג מחדש נכשל')
     } finally {
       setRecat(false)
     }
   }
 
-  if (loading) return <div className="text-gray-400">Loading categories...</div>
+  if (loading) return <div className="text-gray-400">טוען קטגוריות...</div>
 
   return (
     <div className="max-w-3xl">
-      <h2 className="text-xl font-bold text-white mb-6">Categories & Rules</h2>
+      <h2 className="text-xl font-bold text-white mb-6">קטגוריות וכללים</h2>
 
       {/* Re-categorize existing transactions */}
       <div className="bg-gray-900 rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-2 text-white font-medium">
-          <Wand2 className="w-4 h-4" /> Apply rules to existing transactions
+          <Wand2 className="w-4 h-4" /> החלת כללים על תנועות קיימות
         </div>
         <p className="text-sm text-gray-400 mb-3">
-          Run the rules on transactions you already imported. "Uncategorized only"
-          is safe — it never overrides categories you set by hand.
+          הרץ את הכללים על תנועות שכבר יובאו. "רק לא מסווגות" בטוח — לעולם לא ידרוס
+          קטגוריות שהגדרת ידנית.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -87,14 +88,14 @@ export default function CategoriesPage() {
             disabled={recat}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            {recat ? 'Working...' : 'Uncategorized only'}
+            {recat ? 'מעבד...' : 'רק לא מסווגות'}
           </button>
           <button
             onClick={() => recategorize('all')}
             disabled={recat}
             className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            {recat ? 'Working...' : 'Re-evaluate all'}
+            {recat ? 'מעבד...' : 'הערך מחדש הכול'}
           </button>
           {recatMsg && <span className="text-sm text-green-400">{recatMsg}</span>}
         </div>
@@ -103,23 +104,23 @@ export default function CategoriesPage() {
       {/* Add a new rule */}
       <form onSubmit={addRule} className="bg-gray-900 rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-3 text-white font-medium">
-          <Plus className="w-4 h-4" /> Add a rule
+          <Plus className="w-4 h-4" /> הוספת כלל
         </div>
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[12rem]">
             <label className="block text-sm text-gray-400 mb-1">
-              If description contains…
+              אם התיאור מכיל…
             </label>
             <input
               type="text"
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
-              placeholder="e.g. שופרסל or netflix"
+              placeholder="לדוגמה: שופרסל או netflix"
               className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Category</label>
+            <label className="block text-sm text-gray-400 mb-1">קטגוריה</label>
             <select
               value={category}
               onChange={e => setCategory(e.target.value)}
@@ -133,7 +134,7 @@ export default function CategoriesPage() {
             disabled={adding}
             className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
-            {adding ? 'Adding...' : 'Add'}
+            {adding ? 'מוסיף...' : 'הוסף'}
           </button>
         </div>
       </form>
@@ -141,10 +142,10 @@ export default function CategoriesPage() {
       {/* Existing rules */}
       <div className="bg-gray-900 rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-3 text-white font-medium">
-          <Tag className="w-4 h-4" /> Rules <span className="text-gray-500 font-normal">({rules.length})</span>
+          <Tag className="w-4 h-4" /> כללים <span className="text-gray-500 font-normal">({rules.length})</span>
         </div>
         {rules.length === 0 ? (
-          <p className="text-gray-500 text-sm">No rules yet. Add one above.</p>
+          <p className="text-gray-500 text-sm">אין עדיין כללים. הוסף אחד למעלה.</p>
         ) : (
           <div className="max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
@@ -152,8 +153,8 @@ export default function CategoriesPage() {
                 {rules.map(r => (
                   <tr key={r.id} className="border-b border-gray-800/50">
                     <td className="py-2 text-gray-300 font-mono" dir="auto">{r.keyword}</td>
-                    <td className="py-2 text-gray-400">→ {r.category}</td>
-                    <td className="py-2 text-right">
+                    <td className="py-2 text-gray-400">← {r.category}</td>
+                    <td className="py-2 text-left">
                       <button
                         onClick={() => deleteRule(r.id)}
                         className="text-gray-500 hover:text-red-400 transition-colors"
@@ -171,25 +172,25 @@ export default function CategoriesPage() {
 
       {/* Summary by category */}
       <div className="bg-gray-900 rounded-xl p-5">
-        <div className="text-white font-medium mb-3">Spending by category</div>
+        <div className="text-white font-medium mb-3">הוצאות לפי קטגוריה</div>
         {summary.length === 0 ? (
-          <p className="text-gray-500 text-sm">No transactions yet.</p>
+          <p className="text-gray-500 text-sm">אין עדיין תנועות.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-gray-400 border-b border-gray-800">
-                <th className="text-left py-2 font-medium">Category</th>
-                <th className="text-right py-2 font-medium">Count</th>
-                <th className="text-right py-2 font-medium">Expenses</th>
+                <th className="text-right py-2 font-medium">קטגוריה</th>
+                <th className="text-left py-2 font-medium">כמות</th>
+                <th className="text-left py-2 font-medium">הוצאות</th>
               </tr>
             </thead>
             <tbody>
               {summary.map(s => (
                 <tr key={s.category} className="border-b border-gray-800/50">
                   <td className="py-2 text-white">{s.category}</td>
-                  <td className="py-2 text-right text-gray-400">{s.count}</td>
-                  <td className="py-2 text-right font-mono text-red-400">
-                    {s.expenses ? `-₪${Math.abs(s.expenses).toLocaleString()}` : '—'}
+                  <td className="py-2 text-left text-gray-400">{s.count}</td>
+                  <td className="py-2 text-left font-mono text-red-400">
+                    {s.expenses ? `-${ils(-s.expenses)}` : '—'}
                   </td>
                 </tr>
               ))}

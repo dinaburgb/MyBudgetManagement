@@ -22,6 +22,8 @@ import accountsRouter from './routes/accounts.js'
 import transactionsRouter from './routes/transactions.js'
 import scrapeRouter from './routes/scrape.js'
 import categoriesRouter from './routes/categories.js'
+import budgetsRouter from './routes/budgets.js'
+import statsRouter from './routes/stats.js'
 import { seedDefaultRules, migrateCategoriesToHebrew } from './db/categorize.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -110,6 +112,8 @@ app.use('/api/accounts',     accountsRouter)
 app.use('/api/transactions', transactionsRouter)
 app.use('/api/scrape',       scrapeRouter)
 app.use('/api/categories',   categoriesRouter)
+app.use('/api/budgets',      budgetsRouter)
+app.use('/api/stats',        statsRouter)
 
 // --- Fallback: serve React for all non-API routes ---
 app.get('*', (req, res) => {
