@@ -1,19 +1,22 @@
 import { useState } from 'react'
-import { LogOut, Building2, List, BarChart2, Tag } from 'lucide-react'
+import { LogOut, Building2, List, Tag, Wallet, BarChart2 } from 'lucide-react'
 import AccountsPage from './AccountsPage.jsx'
 import TransactionsPage from './TransactionsPage.jsx'
 import CategoriesPage from './CategoriesPage.jsx'
+import BudgetsPage from './BudgetsPage.jsx'
+import OverviewPage from './OverviewPage.jsx'
 import axios from 'axios'
 
 const TABS = [
-  { id: 'accounts',     label: 'Accounts',     icon: Building2 },
-  { id: 'transactions', label: 'Transactions',  icon: List },
-  { id: 'categories',   label: 'Categories',    icon: Tag },
-  { id: 'dashboard',    label: 'Dashboard',     icon: BarChart2 },
+  { id: 'overview',     label: 'סקירה',      icon: BarChart2 },
+  { id: 'accounts',     label: 'חשבונות',    icon: Building2 },
+  { id: 'transactions', label: 'תנועות',     icon: List },
+  { id: 'categories',   label: 'קטגוריות',   icon: Tag },
+  { id: 'budgets',      label: 'תקציבים',    icon: Wallet },
 ]
 
 export default function Dashboard({ onLock }) {
-  const [activeTab, setActiveTab] = useState('accounts')
+  const [activeTab, setActiveTab] = useState('overview')
 
   async function handleLock() {
     await axios.post('/api/auth/lock').catch(() => {})
@@ -25,7 +28,7 @@ export default function Dashboard({ onLock }) {
       {/* Top navigation bar */}
       <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <h1 className="text-lg font-bold text-white">MyFinance</h1>
+          <h1 className="text-lg font-bold text-white">ניהול תקציב משפחתי</h1>
           <nav className="flex gap-1">
             {TABS.map(tab => {
               const Icon = tab.icon
@@ -51,20 +54,17 @@ export default function Dashboard({ onLock }) {
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors"
         >
           <LogOut className="w-4 h-4" />
-          Lock
+          נעילה
         </button>
       </header>
 
       {/* Page content */}
       <main className="p-6">
+        {activeTab === 'overview'     && <OverviewPage />}
         {activeTab === 'accounts'     && <AccountsPage />}
         {activeTab === 'transactions' && <TransactionsPage />}
         {activeTab === 'categories'   && <CategoriesPage />}
-        {activeTab === 'dashboard'    && (
-          <div className="text-gray-400 text-center py-20">
-            Dashboard charts coming in Phase 6
-          </div>
-        )}
+        {activeTab === 'budgets'      && <BudgetsPage />}
       </main>
     </div>
   )

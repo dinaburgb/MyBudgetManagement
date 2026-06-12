@@ -51,8 +51,20 @@ Status of each bank / card integration:
     checkbox (API: `account_id`, `exclude_account_id`, `only_in_totals`).
   - Covered by tests in `tests/test_categorize.js` (13 tests). Full suite: 27 tests.
 
+- **Full Hebrew UI + budgets + charts (2026-06-12):**
+  - Whole interface translated to Hebrew and switched to RTL (`<html lang="he" dir="rtl">`).
+    All pages (lock screen, accounts, transactions, categories) plus nav are Hebrew.
+  - Monthly budget limits per category: `budgets` table (recurring default with
+    optional per-month override), `server/db/budgets.js` + `routes/budgets.js`,
+    and a Budgets page with progress bars (green/amber/red), month picker, and a
+    "this month only" toggle. Spent counts only included accounts.
+  - Dashboard "Overview" page with recharts: monthly income-vs-expense bar chart,
+    expenses-by-category donut, and KPI cards. Backed by `routes/stats.js`.
+  - Tests: `tests/test_budgets.js` (8 tests). Full suite: 35 passing.
+
 ## Next steps
 - Validate the remaining wired sources (Mizrahi, OneZero, Isracard, Max) against real accounts
 - Let the user grow their own rule set from the real "אחר" transactions in Cal
-- Budget limits per category (set a monthly cap, track against it)
-- Reporting / analytics on the dashboard (charts by month and by category)
+  (most spending is still uncategorized — add merchant rules, then re-categorize)
+- Code-split the client bundle (recharts pushed it past 500 kB)
+- Optional: budget vs. actual on the Overview dashboard

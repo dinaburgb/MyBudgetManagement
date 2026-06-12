@@ -15,11 +15,11 @@ export default function LockScreen({ onUnlocked }) {
     setError('')
 
     if (firstRun && password !== confirm) {
-      setError('Passwords do not match')
+      setError('הסיסמאות אינן תואמות')
       return
     }
     if (password.length < 8) {
-      setError('Password must be at least 8 characters')
+      setError('הסיסמה חייבת להכיל לפחות 8 תווים')
       return
     }
 
@@ -34,11 +34,11 @@ export default function LockScreen({ onUnlocked }) {
       }
     } catch (err) {
       if (err.response?.status === 401) {
-        setError('Wrong password. Try again.')
+        setError('סיסמה שגויה. נסה שוב.')
       } else if (err.response?.data?.error) {
         setError(err.response.data.error)
       } else {
-        setError('Server error. Make sure the app is running.')
+        setError('שגיאת שרת. ודא שהאפליקציה פועלת.')
       }
     } finally {
       setLoading(false)
@@ -60,19 +60,19 @@ export default function LockScreen({ onUnlocked }) {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white">MyFinance</h1>
-          <p className="text-gray-400 text-sm mt-1">Private financial dashboard</p>
+          <h1 className="text-2xl font-bold text-white">ניהול תקציב משפחתי</h1>
+          <p className="text-gray-400 text-sm mt-1">לוח בקרה פיננסי פרטי</p>
         </div>
 
         {/* Login form */}
         <form onSubmit={handleSubmit} className="bg-gray-900 rounded-2xl p-6 shadow-xl">
           <h2 className="text-white font-semibold mb-4">
-            {firstRun ? 'Set Master Password' : 'Enter Master Password'}
+            {firstRun ? 'הגדרת סיסמה ראשית' : 'הזן סיסמה ראשית'}
           </h2>
 
           {firstRun && (
             <p className="text-yellow-400 text-sm mb-4 bg-yellow-400/10 rounded-lg p-3">
-              First time setup — choose a strong password. It cannot be recovered if forgotten.
+              הגדרה ראשונית — בחר סיסמה חזקה. לא ניתן לשחזר אותה אם תישכח.
             </p>
           )}
 
@@ -82,14 +82,14 @@ export default function LockScreen({ onUnlocked }) {
               type={showPw ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Master password"
-              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 pr-10 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+              placeholder="סיסמה ראשית"
+              className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 pl-10 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
               autoFocus
             />
             <button
               type="button"
               onClick={() => setShowPw(v => !v)}
-              className="absolute right-3 top-3.5 text-gray-400 hover:text-white"
+              className="absolute left-3 top-3.5 text-gray-400 hover:text-white"
             >
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -102,7 +102,7 @@ export default function LockScreen({ onUnlocked }) {
                 type={showPw ? 'text' : 'password'}
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
-                placeholder="Confirm password"
+                placeholder="אישור סיסמה"
                 className="w-full bg-gray-800 text-white rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
               />
             </div>
@@ -118,7 +118,7 @@ export default function LockScreen({ onUnlocked }) {
             disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
           >
-            {loading ? 'Checking...' : (firstRun ? 'Set Password & Enter' : 'Unlock')}
+            {loading ? 'בודק...' : (firstRun ? 'שמור סיסמה והיכנס' : 'כניסה')}
           </button>
 
           {!firstRun && (
@@ -127,13 +127,13 @@ export default function LockScreen({ onUnlocked }) {
               onClick={handleFirstRunToggle}
               className="w-full mt-3 text-gray-500 hover:text-gray-300 text-sm text-center transition-colors"
             >
-              First time? Set up master password
+              פעם ראשונה? הגדר סיסמה ראשית
             </button>
           )}
         </form>
 
         <p className="text-center text-gray-600 text-xs mt-4">
-          All data stays on your computer. Nothing is sent to the cloud.
+          כל הנתונים נשמרים במחשב שלך בלבד. שום דבר לא נשלח לענן.
         </p>
       </div>
     </div>

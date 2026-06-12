@@ -66,6 +66,19 @@ CREATE TABLE IF NOT EXISTS category_rules (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Monthly budget limits per category.
+-- month = '' means a recurring default that applies to every month; a specific
+-- 'YYYY-MM' row overrides the default for that one month.
+CREATE TABLE IF NOT EXISTS budgets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  category   TEXT NOT NULL,
+  month      TEXT NOT NULL DEFAULT '',  -- '' = recurring default, else 'YYYY-MM'
+  amount     REAL NOT NULL,             -- positive monthly limit in ILS
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(category, month)
+);
+
 -- Activity log — NO sensitive data, only operational events
 CREATE TABLE IF NOT EXISTS activity_log (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

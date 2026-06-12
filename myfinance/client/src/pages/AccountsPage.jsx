@@ -8,26 +8,26 @@ const SOURCES = [
 ]
 
 const SOURCE_LABELS = {
-  hapoalim: 'Bank Hapoalim',
-  discount:  'Bank Discount',
-  fibi:      'FIBI (Beinleumi)',
-  mizrahi:   'Mizrahi Tefahot',
-  onezero:   'OneZero',
-  isracard:  'Isracard',
-  cal:       'Visa Cal',
-  max:       'Max',
+  hapoalim: 'בנק הפועלים',
+  discount: 'בנק דיסקונט',
+  fibi:     'הבינלאומי (FIBI)',
+  mizrahi:  'מזרחי טפחות',
+  onezero:  'וואן זירו',
+  isracard: 'ישראכרט',
+  cal:      'ויזה כאל',
+  max:      'מקס',
 }
 
 // Which fields each source needs
 const CREDENTIAL_FIELDS = {
-  hapoalim:  [{ key: 'userCode',  label: 'User Code' }, { key: 'password', label: 'Password', secret: true }],
-  discount:  [{ key: 'id',        label: 'ID Number' }, { key: 'password', label: 'Password', secret: true }, { key: 'num', label: 'User Code' }],
-  fibi:      [{ key: 'username',  label: 'Username'  }, { key: 'password', label: 'Password', secret: true }],
-  mizrahi:   [{ key: 'username',  label: 'Username'  }, { key: 'password', label: 'Password', secret: true }],
-  onezero:   [{ key: 'email',     label: 'Email'     }, { key: 'password', label: 'Password', secret: true }],
-  isracard:  [{ key: 'id',        label: 'ID Number' }, { key: 'card6Digits', label: 'Card 6 digits' }, { key: 'password', label: 'Password', secret: true }],
-  cal:       [{ key: 'username',  label: 'Username'  }, { key: 'password', label: 'Password', secret: true }],
-  max:       [{ key: 'username',  label: 'Username'  }, { key: 'password', label: 'Password', secret: true }],
+  hapoalim:  [{ key: 'userCode',  label: 'קוד משתמש' }, { key: 'password', label: 'סיסמה', secret: true }],
+  discount:  [{ key: 'id',        label: 'תעודת זהות' }, { key: 'password', label: 'סיסמה', secret: true }, { key: 'num', label: 'קוד משתמש' }],
+  fibi:      [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
+  mizrahi:   [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
+  onezero:   [{ key: 'email',     label: 'אימייל'    }, { key: 'password', label: 'סיסמה', secret: true }],
+  isracard:  [{ key: 'id',        label: 'תעודת זהות' }, { key: 'card6Digits', label: '6 ספרות בכרטיס' }, { key: 'password', label: 'סיסמה', secret: true }],
+  cal:       [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
+  max:       [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
 }
 
 const PRESET_OWNERS = ['Boris', 'Irena', 'Joint']
@@ -52,16 +52,14 @@ function AccountForm({ initial, onSave, onCancel }) {
     e.preventDefault()
     setError('')
 
-    // Validate custom owner name when "Other" is selected
     if (ownerSelect === 'Other' && !customOwner.trim()) {
-      setError('Please enter the owner name')
+      setError('נא להזין שם בעלים')
       return
     }
 
-    // Validate all credential fields are filled
     for (const f of fields) {
       if (!creds[f.key]) {
-        setError(`Please fill in: ${f.label}`)
+        setError(`נא למלא: ${f.label}`)
         return
       }
     }
@@ -81,7 +79,7 @@ function AccountForm({ initial, onSave, onCancel }) {
       }
       onSave()
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save account')
+      setError(err.response?.data?.error || 'שמירת החשבון נכשלה')
     } finally {
       setSaving(false)
     }
@@ -90,12 +88,12 @@ function AccountForm({ initial, onSave, onCancel }) {
   return (
     <form onSubmit={handleSubmit} className="bg-gray-800 rounded-xl p-5 space-y-4">
       <h3 className="font-semibold text-white">
-        {initial ? 'Edit Account' : 'Add New Account'}
+        {initial ? 'עריכת חשבון' : 'הוספת חשבון חדש'}
       </h3>
 
       {/* Source */}
       <div>
-        <label className="block text-sm text-gray-400 mb-1">Bank / Card</label>
+        <label className="block text-sm text-gray-400 mb-1">בנק / כרטיס</label>
         <select
           value={source}
           onChange={e => { setSource(e.target.value); setCreds({}) }}
@@ -109,7 +107,7 @@ function AccountForm({ initial, onSave, onCancel }) {
 
       {/* Display name */}
       <div>
-        <label className="block text-sm text-gray-400 mb-1">Display Name (optional)</label>
+        <label className="block text-sm text-gray-400 mb-1">שם תצוגה (לא חובה)</label>
         <input
           type="text"
           value={name}
@@ -121,7 +119,7 @@ function AccountForm({ initial, onSave, onCancel }) {
 
       {/* Owner */}
       <div>
-        <label className="block text-sm text-gray-400 mb-1">Owner</label>
+        <label className="block text-sm text-gray-400 mb-1">בעלים</label>
         <select
           value={ownerSelect}
           onChange={e => setOwnerSelect(e.target.value)}
@@ -129,16 +127,15 @@ function AccountForm({ initial, onSave, onCancel }) {
         >
           <option value="Boris">Boris</option>
           <option value="Irena">Irena</option>
-          <option value="Joint">Joint</option>
-          <option value="Other">Other…</option>
+          <option value="Joint">משותף</option>
+          <option value="Other">אחר…</option>
         </select>
-        {/* Custom owner name field, shown only when "Other" is selected */}
         {ownerSelect === 'Other' && (
           <input
             type="text"
             value={customOwner}
             onChange={e => setCustomOwner(e.target.value)}
-            placeholder="Enter owner name"
+            placeholder="הזן שם בעלים"
             className="w-full mt-2 bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
           />
         )}
@@ -146,7 +143,7 @@ function AccountForm({ initial, onSave, onCancel }) {
 
       {/* Credential fields */}
       <div className="space-y-3">
-        <p className="text-sm text-gray-400 font-medium">Login Credentials</p>
+        <p className="text-sm text-gray-400 font-medium">פרטי התחברות</p>
         {fields.map(f => (
           <div key={f.key}>
             <label className="block text-sm text-gray-400 mb-1">{f.label}</label>
@@ -169,14 +166,14 @@ function AccountForm({ initial, onSave, onCancel }) {
           disabled={saving}
           className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors"
         >
-          {saving ? 'Saving...' : 'Save'}
+          {saving ? 'שומר...' : 'שמירה'}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg transition-colors"
         >
-          Cancel
+          ביטול
         </button>
       </div>
     </form>
@@ -203,7 +200,7 @@ export default function AccountsPage() {
   useEffect(() => { load() }, [])
 
   async function handleDelete(id) {
-    if (!confirm('Delete this account? This will NOT delete its transactions.')) return
+    if (!confirm('למחוק חשבון זה? התנועות שלו לא יימחקו.')) return
     await axios.delete(`/api/accounts/${id}`)
     load()
   }
@@ -216,17 +213,16 @@ export default function AccountsPage() {
 
   // Which account is currently syncing, and the last result message
   const [syncingId, setSyncingId] = useState(null)
-  const [syncMsg, setSyncMsg]     = useState(null)  // { id, text, ok }
+  const [syncMsg, setSyncMsg]     = useState(null)
 
   // Toggle whether this account is included in totals/summaries
   async function toggleInTotals(acc) {
     const next = acc.include_in_totals ? 0 : 1
-    // optimistic update
     setAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, include_in_totals: next } : a))
     try {
       await axios.put(`/api/accounts/${acc.id}`, { include_in_totals: next })
     } catch {
-      load()  // revert on failure
+      load()
     }
   }
 
@@ -238,7 +234,7 @@ export default function AccountsPage() {
       const s = res.data.stats || {}
       setSyncMsg({
         id: acc.id, ok: true,
-        text: `Done — ${s.inserted} new, ${s.updated} updated, ${s.skipped} unchanged`,
+        text: `הסתיים — ${s.inserted} חדשות, ${s.updated} עודכנו, ${s.skipped} ללא שינוי`,
         accountsCount: s.accountsCount,
         breakdown: s.breakdown || [],
       })
@@ -246,25 +242,25 @@ export default function AccountsPage() {
     } catch (err) {
       setSyncMsg({
         id: acc.id, ok: false,
-        text: err.response?.data?.error || 'Sync failed',
+        text: err.response?.data?.error || 'הסנכרון נכשל',
       })
     } finally {
       setSyncingId(null)
     }
   }
 
-  if (loading) return <div className="text-gray-400">Loading accounts...</div>
+  if (loading) return <div className="text-gray-400">טוען חשבונות...</div>
 
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-white">Bank Accounts & Cards</h2>
+        <h2 className="text-xl font-bold text-white">חשבונות וכרטיסים</h2>
         <button
           onClick={() => { setShowForm(true); setEditing(null) }}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Add Account
+          הוספת חשבון
         </button>
       </div>
 
@@ -283,7 +279,7 @@ export default function AccountsPage() {
       {accounts.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p>No accounts yet. Click "Add Account" to get started.</p>
+          <p>אין עדיין חשבונות. לחץ על "הוספת חשבון" כדי להתחיל.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -298,8 +294,8 @@ export default function AccountsPage() {
                   <div className="text-sm text-gray-400 mt-0.5">
                     {SOURCE_LABELS[acc.source]} · {acc.owner}
                     {acc.last_scraped && (
-                      <span className="ml-3 text-gray-500">
-                        Last synced: {new Date(acc.last_scraped).toLocaleString()}
+                      <span className="mr-3 text-gray-500">
+                        סונכרן לאחרונה: {new Date(acc.last_scraped).toLocaleString('he-IL')}
                       </span>
                     )}
                   </div>
@@ -316,7 +312,7 @@ export default function AccountsPage() {
                     className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
                   >
                     <RefreshCw className={`w-4 h-4 ${syncingId === acc.id ? 'animate-spin' : ''}`} />
-                    {syncingId === acc.id ? 'Syncing...' : 'Update'}
+                    {syncingId === acc.id ? 'מסנכרן...' : 'עדכון'}
                   </button>
                   <button
                     onClick={() => { setEditing(acc); setShowForm(false) }}
@@ -341,9 +337,9 @@ export default function AccountsPage() {
                   onChange={() => toggleInTotals(acc)}
                   className="w-4 h-4 accent-blue-600"
                 />
-                Include in totals & summaries
+                כלול בחישובים ובסיכומים
                 {!acc.include_in_totals && (
-                  <span className="text-amber-500/80 text-xs">(excluded)</span>
+                  <span className="text-amber-500/80 text-xs">(לא נכלל)</span>
                 )}
               </label>
 
@@ -357,13 +353,13 @@ export default function AccountsPage() {
                   {syncMsg.ok && syncMsg.accountsCount > 0 && (
                     <div className="mt-2 text-gray-400">
                       <div className="text-gray-300 font-medium">
-                        {syncMsg.accountsCount} account{syncMsg.accountsCount > 1 ? 's' : ''} under this login:
+                        {syncMsg.accountsCount} חשבונות תחת התחברות זו:
                       </div>
                       <ul className="mt-1 space-y-0.5">
                         {syncMsg.breakdown.map(b => (
                           <li key={b.accountNumber} className="font-mono text-xs">
-                            • {b.accountNumber} — {b.total} transactions
-                            {b.inserted > 0 && <span className="text-green-400"> ({b.inserted} new)</span>}
+                            • {b.accountNumber} — {b.total} תנועות
+                            {b.inserted > 0 && <span className="text-green-400"> ({b.inserted} חדשות)</span>}
                           </li>
                         ))}
                       </ul>
