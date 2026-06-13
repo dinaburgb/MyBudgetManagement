@@ -279,9 +279,13 @@ export default function OverviewPage() {
             </div>
           </div>
 
+          {/* Budget table and drill-down — side by side when both are shown */}
+          {(data.budgetTable?.length > 0 || drill) && (
+          <div className={`mt-6 grid gap-6 items-start ${data.budgetTable?.length > 0 && drill ? 'lg:grid-cols-2' : 'max-w-2xl'}`}>
+
           {/* Budget vs. actual table for the selected period */}
           {data.budgetTable?.length > 0 && (
-            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
+            <div className="bg-gray-900 rounded-xl p-5">
               <h3 className="text-white font-medium mb-1">תקציב מול ביצוע</h3>
               <p className="text-xs text-gray-500 mb-3">
                 סכום על פני {selMonths.size} חודשים שנבחרו. תא ריק = לא הוגדר תקציב.
@@ -321,7 +325,7 @@ export default function OverviewPage() {
 
           {/* Drill-down: transactions for the clicked category */}
           {drill && (
-            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
+            <div className="bg-gray-900 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-white font-medium flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
@@ -346,6 +350,9 @@ export default function OverviewPage() {
                 </div>
               )}
             </div>
+          )}
+
+          </div>
           )}
         </>
       )}
