@@ -17,7 +17,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { openDatabase } from './db/database.js'
-import { deriveKey, isUnlocked, verifyPassword, savePasswordSentinel, clearKey } from './crypto/encryption.js'
+import { deriveKey, isUnlocked, verifyPassword, savePasswordSentinel, clearKey,
+         isPasswordSet, changeMasterPassword, resetMasterPassword } from './crypto/encryption.js'
 import accountsRouter from './routes/accounts.js'
 import transactionsRouter from './routes/transactions.js'
 import scrapeRouter from './routes/scrape.js'
@@ -105,9 +106,42 @@ app.post('/api/auth/unlock', (req, res) => {
   res.json({ status: 'unlocked' })
 })
 
-/** GET /api/auth/status — is the app currently unlocked? */
+/** GET /api/auth/status — is the app unlocked, and has a password been set? */
 app.get('/api/auth/status', (req, res) => {
-  res.json({ unlocked: isUnlocked() })
+  res.json({ unlocked: isUnlocked(), passwordSet: isPasswordSet() })
+})
+
+/**
+ * POST /api/auth/change-password — change the app's master password.
+ * Body: { oldPassword, newPassword }. Re-encrypts stored bank credentials under
+ * the new key. Available from the lock screen (no unlock check needed: the old
+ * password is verified inside).
+ */
+app.post('/api/auth/change-password', (req, res) => {
+  const { oldPassword, newPassword } = req.body || {}
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Old and new passwords are required' })
+  if (String(newPassword).length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' })
+  try {
+    const { reencrypted } = changeMasterPassword(oldPassword, newPassword)
+    res.json({ status: 'changed', reencrypted })
+  } catch (err) {
+    if (err.code === 'WRONG_PASSWORD') return res.status(401).json({ error: 'Wrong current password' })
+    console.error('[auth] change-password failed:', err.message)
+    res.status(500).json({ error: 'Could not change password' })
+  }
+})
+
+/**
+ * POST /api/auth/reset — forgot master password. Wipes the encryption material
+ * and the (unrecoverable) stored bank credentials, but keeps all financial data.
+ * Requires an explicit confirmation token to avoid accidents.
+ */
+app.post('/api/auth/reset', (req, res) => {
+  if ((req.body || {}).confirm !== 'RESET') {
+    return res.status(400).json({ error: 'Confirmation required' })
+  }
+  const { clearedAccounts } = resetMasterPassword()
+  res.json({ status: 'reset', clearedAccounts })
 })
 
 /** POST /api/auth/lock — clear key from memory */

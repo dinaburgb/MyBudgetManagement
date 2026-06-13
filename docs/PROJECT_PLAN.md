@@ -105,6 +105,21 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Multi-filters, master-password change/reset, disclaimer (2026-06-13):**
+  - Transactions filters for owner / category / account are now multi-select
+    (`client/src/MultiSelect.jsx`); the owners list is derived from the accounts
+    (no hardcoded Boris/Irena/Joint). Server `/api/transactions` accepts
+    comma-separated `owner`, `category`, `account_id` (built as `IN (...)`).
+  - Master (app) password: `POST /api/auth/change-password` re-encrypts all stored
+    bank credentials under the new key (`changeMasterPassword`); `POST /api/auth/reset`
+    is the "forgot password" path — wipes salt+sentinel and the unrecoverable
+    encrypted credentials but KEEPS all financial data (`resetMasterPassword`).
+    `/api/auth/status` now also returns `passwordSet`. Both flows are on the lock
+    screen (change / "שכחתי סיסמה").
+  - Disclaimer: full "as-is, no warranty, use at own risk, not financial advice"
+    text on the lock screen with a required acceptance checkbox (gates entry); a
+    short version (`DISCLAIMER_SHORT` in `client/src/legal.js`) in a footer on every
+    tab.
 - **Apply-rule prompt + income categories (2026-06-13):**
   - After a category is changed from any transaction list (Transactions table,
     Overview/Budgets drill-downs), a prompt offers to turn it into an authoritative

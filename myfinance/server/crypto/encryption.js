@@ -14,6 +14,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getDb } from '../db/database.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SALT_FILE = path.join(__dirname, '..', '..', 'data', 'salt.bin')
@@ -112,4 +113,57 @@ export function verifyPassword(masterPassword) {
     clearKey()
     return false
   }
+}
+
+/** True once a master password has been set (the sentinel exists). */
+export function isPasswordSet() {
+  return fs.existsSync(SENTINEL_FILE)
+}
+
+/**
+ * Change the master password. Verifies the old one, then re-encrypts every
+ * stored bank/card credential under the key derived from the new password and
+ * rewrites the sentinel. The session stays unlocked with the new key.
+ * Throws { code: 'WRONG_PASSWORD' } if the old password is wrong.
+ */
+export function changeMasterPassword(oldPassword, newPassword) {
+  const ok = verifyPassword(oldPassword)            // derives the OLD key on success
+  if (ok !== true) throw Object.assign(new Error('wrong password'), { code: 'WRONG_PASSWORD' })
+
+  const db = getDb()
+  const accounts = db.prepare(`SELECT id, credentials FROM accounts`).all()
+  // Decrypt everything with the old key while it's still active.
+  const plain = accounts.map(a => ({ id: a.id, text: a.credentials ? decrypt(a.credentials) : '' }))
+
+  deriveKey(newPassword)                            // switch session to the NEW key
+  try {
+    db.exec('BEGIN')
+    const upd = db.prepare(`UPDATE accounts SET credentials = ?, updated_at = datetime('now') WHERE id = ?`)
+    for (const p of plain) upd.run(p.text ? encrypt(p.text) : '', p.id)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    deriveKey(oldPassword)                          // restore a working session
+    throw err
+  }
+  savePasswordSentinel()                            // sentinel now under the new key
+  return { reencrypted: plain.length }
+}
+
+/**
+ * Reset the master password ("forgot password"). The encryption key can't be
+ * recovered, so this wipes the salt + sentinel and clears the (now-unusable)
+ * encrypted credentials — but keeps ALL financial data (transactions, categories,
+ * budgets are stored in plaintext). The user then sets a fresh password and
+ * re-enters each bank/card login. Returns how many accounts were cleared.
+ */
+export function resetMasterPassword() {
+  const db = getDb()
+  const cleared = db.prepare(`SELECT COUNT(*) c FROM accounts WHERE credentials != ''`).get().c
+  db.prepare(`UPDATE accounts SET credentials = '', updated_at = datetime('now')`).run()
+  clearKey()
+  for (const f of [SALT_FILE, SENTINEL_FILE]) {
+    try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch { /* best effort */ }
+  }
+  return { clearedAccounts: cleared }
 }

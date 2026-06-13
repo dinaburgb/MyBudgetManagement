@@ -29,11 +29,20 @@ router.get('/', (req, res) => {
   const where  = []
   const params = []
 
-  if (owner)      { where.push('owner = ?');      params.push(owner) }
-  if (source)     { where.push('source = ?');     params.push(source) }
-  if (category)   { where.push('category = ?');   params.push(category) }
+  // A filter may be a single value or a comma-separated list (multi-select).
+  // For lists we build an IN (?, ?, ...) clause.
+  const addIn = (col, raw, map = v => v) => {
+    const vals = String(raw).split(',').map(s => s.trim()).filter(Boolean).map(map)
+    if (vals.length === 0) return
+    where.push(`${col} IN (${vals.map(() => '?').join(',')})`)
+    params.push(...vals)
+  }
+
+  if (owner)      addIn('owner', owner)
+  if (source)     addIn('source', source)
+  if (category)   addIn('category', category)
   if (status)     { where.push('status = ?');     params.push(status) }
-  if (account_id) { where.push('account_id = ?'); params.push(Number(account_id)) }
+  if (account_id) addIn('account_id', account_id, Number)
   if (exclude_account_id) { where.push('account_id != ?'); params.push(Number(exclude_account_id)) }
   // Only transactions from accounts the user includes in totals
   if (only_in_totals === '1') {

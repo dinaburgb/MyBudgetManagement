@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useCategories } from '../CategoriesContext.jsx'
 import NoteEditor from '../NoteEditor.jsx'
 import ApplyRulePrompt from '../ApplyRulePrompt.jsx'
+import MultiSelect from '../MultiSelect.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -17,18 +18,29 @@ export default function TransactionsPage() {
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(true)
   const [accounts, setAccounts] = useState([])
-  const [filters, setFilters] = useState({ search: '', owner: '', source: '', category: '', account_id: '', only_in_totals: '', date_from: '', date_to: '' })
+  const EMPTY_FILTERS = { search: '', owners: [], categories: [], account_ids: [], only_in_totals: '', date_from: '', date_to: '' }
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
 
   // Load the account list once, for the account filter dropdown
   useEffect(() => {
     axios.get('/api/accounts').then(res => setAccounts(res.data)).catch(() => {})
   }, [])
 
+  // All distinct owners, taken from the accounts (so every owner shows up, not a
+  // hardcoded list).
+  const owners = [...new Set(accounts.map(a => a.owner).filter(Boolean))]
+
   async function load(p = page) {
     setLoading(true)
     try {
-      const params = { page: p, limit: 50, ...filters }
-      Object.keys(params).forEach(k => { if (!params[k]) delete params[k] })
+      const params = { page: p, limit: 50 }
+      if (filters.search)            params.search = filters.search
+      if (filters.owners.length)     params.owner = filters.owners.join(',')
+      if (filters.categories.length) params.category = filters.categories.join(',')
+      if (filters.account_ids.length) params.account_id = filters.account_ids.join(',')
+      if (filters.only_in_totals)    params.only_in_totals = filters.only_in_totals
+      if (filters.date_from)         params.date_from = filters.date_from
+      if (filters.date_to)           params.date_to = filters.date_to
       const res = await axios.get('/api/transactions', { params })
       setRows(res.data.rows)
       setTotal(res.data.total)
@@ -86,36 +98,24 @@ export default function TransactionsPage() {
           onChange={e => setFilter('search', e.target.value)}
           className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 w-52"
         />
-        <select
-          value={filters.owner}
-          onChange={e => setFilter('owner', e.target.value)}
-          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">כל הבעלים</option>
-          <option value="Boris">Boris</option>
-          <option value="Irena">Irena</option>
-          <option value="Joint">משותף</option>
-        </select>
-        <select
-          value={filters.category}
-          onChange={e => setFilter('category', e.target.value)}
-          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">כל הקטגוריות</option>
-          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select
-          value={filters.account_id}
-          onChange={e => setFilter('account_id', e.target.value)}
-          className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">כל החשבונות</option>
-          {accounts.map(a => (
-            <option key={a.id} value={a.id}>
-              {a.name}{a.include_in_totals ? '' : ' (לא נכלל)'}
-            </option>
-          ))}
-        </select>
+        <MultiSelect
+          label="בעלים"
+          options={owners.map(o => ({ value: o, label: o }))}
+          selected={filters.owners}
+          onChange={v => setFilter('owners', v)}
+        />
+        <MultiSelect
+          label="קטגוריות"
+          options={CATEGORIES.map(c => ({ value: c, label: c }))}
+          selected={filters.categories}
+          onChange={v => setFilter('categories', v)}
+        />
+        <MultiSelect
+          label="חשבונות"
+          options={accounts.map(a => ({ value: String(a.id), label: `${a.name}${a.include_in_totals ? '' : ' (לא נכלל)'}` }))}
+          selected={filters.account_ids}
+          onChange={v => setFilter('account_ids', v)}
+        />
         <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -139,7 +139,7 @@ export default function TransactionsPage() {
           className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
-          onClick={() => setFilters({ search: '', owner: '', source: '', category: '', account_id: '', only_in_totals: '', date_from: '', date_to: '' })}
+          onClick={() => setFilters(EMPTY_FILTERS)}
           className="text-gray-400 hover:text-white text-sm transition-colors"
         >
           נקה
