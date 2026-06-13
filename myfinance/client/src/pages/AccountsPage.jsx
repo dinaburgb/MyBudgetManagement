@@ -33,6 +33,11 @@ const CREDENTIAL_FIELDS = {
 
 const PRESET_OWNERS = ['Boris', 'Irena', 'Joint']
 
+// Credit-card sources show one "account number" per card, so we word the
+// sub-account breakdown as cards rather than accounts.
+const CARD_SOURCES = new Set(['cal', 'isracard', 'max'])
+const isCard = source => CARD_SOURCES.has(source)
+
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
   const [source, setSource] = useState(initial?.source || 'hapoalim')
@@ -461,7 +466,7 @@ export default function AccountsPage() {
                     {subOpen.has(acc.id)
                       ? <ChevronDown className="w-4 h-4 text-gray-500" />
                       : <ChevronLeft className="w-4 h-4 text-gray-500" />}
-                    פירוט חשבונות ({acc.subaccount_count})
+                    {isCard(acc.source) ? 'פירוט כרטיסים' : 'פירוט חשבונות'} ({acc.subaccount_count})
                     {acc.excluded_count > 0 && (
                       <span className="text-amber-500/80 text-xs">— {acc.excluded_count} לא נכללים</span>
                     )}
