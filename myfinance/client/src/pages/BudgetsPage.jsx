@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { ChevronDown, ChevronLeft } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
+import TxnRow from '../TxnRow.jsx'
 
 // Build a list of month options: 12 months back through 1 month ahead.
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -33,7 +35,37 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
   const [value, setValue] = useState(row.limit ?? '')
   const [saving, setSaving] = useState(false)
 
+  // Drill-down: this category's transactions for the selected month.
+  const [open, setOpen] = useState(false)
+  const [txns, setTxns] = useState(null)        // null = not loaded yet
+  const [txLoading, setTxLoading] = useState(false)
+
   useEffect(() => { setValue(row.limit ?? '') }, [row.limit, month])
+  // Collapse and drop cached transactions whenever the month changes.
+  useEffect(() => { setOpen(false); setTxns(null) }, [month])
+
+  async function loadTxns() {
+    setTxLoading(true)
+    try {
+      const res = await axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
+      setTxns(res.data.rows)
+    } catch {
+      setTxns([])
+    } finally {
+      setTxLoading(false)
+    }
+  }
+  async function toggleDrill() {
+    const next = !open
+    setOpen(next)
+    if (next && txns === null) await loadTxns()
+  }
+  // A category change moves a charge out of this bucket: refresh the list and the
+  // whole month's totals.
+  function onTxnChanged() {
+    loadTxns()
+    onSaved()
+  }
 
   const limit = row.limit
   const ratio = limit ? row.spent / limit : 0
@@ -75,9 +107,20 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
             <span className="text-xs text-blue-400 bg-blue-500/10 rounded px-1.5 py-0.5">לחודש זה</span>
           )}
         </div>
-        <div className="text-sm font-mono text-gray-300">
-          {ils(row.spent)}{limit != null && <span className="text-gray-500"> / {ils(limit)}</span>}
-        </div>
+        {row.spent > 0 ? (
+          <button
+            onClick={toggleDrill}
+            className="flex items-center gap-1 text-sm font-mono text-gray-300 hover:text-white transition-colors"
+            title="הצג תנועות"
+          >
+            {open ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronLeft className="w-4 h-4 text-gray-500" />}
+            {ils(row.spent)}{limit != null && <span className="text-gray-500"> / {ils(limit)}</span>}
+          </button>
+        ) : (
+          <div className="text-sm font-mono text-gray-300">
+            {ils(row.spent)}{limit != null && <span className="text-gray-500"> / {ils(limit)}</span>}
+          </div>
+        )}
       </div>
 
       {/* Progress bar */}
@@ -95,6 +138,27 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
         </>
       ) : (
         <div className="text-xs text-gray-500">לא הוגדר תקציב</div>
+      )}
+
+      {/* Drill-down: this category's transactions for the month */}
+      {open && (
+        <div className="mt-3 border-t border-gray-800 pt-3">
+          {txLoading ? (
+            <div className="text-gray-400 text-sm">טוען תנועות...</div>
+          ) : !txns || txns.length === 0 ? (
+            <div className="text-gray-500 text-sm">אין תנועות בקטגוריה זו לחודש הנבחר.</div>
+          ) : (
+            <div className="max-h-80 overflow-y-auto">
+              <table className="w-full text-sm">
+                <tbody>
+                  {txns.map(t => (
+                    <TxnRow key={t.id} txn={t} onChanged={onTxnChanged} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Editor */}

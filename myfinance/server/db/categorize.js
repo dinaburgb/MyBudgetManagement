@@ -14,6 +14,36 @@
 import { getDb } from './database.js'
 
 /**
+ * Rules at or above this priority are "authoritative": they override even the
+ * category the scraper itself provided, on import and when re-applied. Normal
+ * rules (below this) only fill in when the scraper gave no category. This lets a
+ * high-confidence keyword like "רב קו" or "מוסך" win every time, instead of the
+ * scraper's own, messier taxonomy.
+ */
+export const AUTHORITATIVE_PRIORITY = 100
+
+/**
+ * Curated keyword→category rules we always want to hold, regardless of what the
+ * scraper returns. Seeded as authoritative (high priority) and applied to
+ * existing transactions the first time each one is added (see ensureEssentialRules).
+ * Grounded in the real descriptions in this database.
+ */
+export const ESSENTIAL_RULES = [
+  // Public transport top-ups are the kids' — keep them under "ילדים", not "רכב".
+  ['רב קו', 'ילדים'],
+  // Private-vehicle running costs all roll up into "רכב".
+  ['דלק', 'רכב'],
+  ['מוסך', 'רכב'],
+  ['פנגו', 'רכב'],
+  ['סלופארק', 'רכב'],
+  ['משרד התחבורה', 'רכב'],
+  ['רשיונות רכ', 'רכב'],   // "משרד התחבורה - רשיונות רכ" (note spelling: רשיון, no first yud)
+  ['רישוי', 'רכב'],
+  ['אגרת רכב', 'רכב'],
+  ['קנס', 'רכב'],          // traffic fines; no such rows yet, here for the future
+]
+
+/**
  * Default rules seeded on first run. Keywords cover common Israeli merchants and
  * services, in both Hebrew and English (cards often return Latin-letter names).
  * Keywords are matched as lowercased substrings of the description.
@@ -203,6 +233,20 @@ export function categorizeDescription(description, rules) {
 }
 
 /**
+ * Like categorizeDescription, but returns the full winning rule object
+ * ({ keyword, category, priority }) instead of just the category, so the caller
+ * can tell whether the match is authoritative. Returns null if nothing matches.
+ */
+export function matchRule(description, rules) {
+  const desc = (description || '').toLowerCase()
+  if (!desc) return null
+  for (const rule of rules) {
+    if (rule.keyword && desc.includes(rule.keyword)) return rule
+  }
+  return null
+}
+
+/**
  * Seed the default rule set, but ONLY if the table is empty. This runs on every
  * server start; once rules exist (seeded or user-created) it does nothing, so it
  * never overwrites the user's own rules.
@@ -222,6 +266,36 @@ export function seedDefaultRules(db = getDb()) {
     throw err
   }
   return DEFAULT_RULES.length
+}
+
+/**
+ * Ensure the curated ESSENTIAL_RULES exist as authoritative rules, and apply each
+ * to existing transactions the first time it is added. Idempotent: a rule that is
+ * already present is left untouched (so it won't keep fighting later manual edits).
+ *
+ * Returns { added, applied } — how many rules were newly inserted and how many
+ * existing transactions were moved as a result.
+ */
+export function ensureEssentialRules(db = getDb()) {
+  const find = db.prepare(
+    `SELECT id, priority FROM category_rules WHERE keyword = ? AND category = ? LIMIT 1`
+  )
+  const insert = db.prepare(
+    `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
+  )
+  const bump = db.prepare(`UPDATE category_rules SET priority = ? WHERE id = ?`)
+  let added = 0, applied = 0
+  for (const [keyword, category] of ESSENTIAL_RULES) {
+    const existing = find.get(keyword, category)
+    // Already an authoritative rule → nothing to do (don't re-apply over later edits).
+    if (existing && existing.priority >= AUTHORITATIVE_PRIORITY) continue
+    if (existing) bump.run(AUTHORITATIVE_PRIORITY, existing.id)  // upgrade a weak default
+    else insert.run(keyword, category, AUTHORITATIVE_PRIORITY)
+    added++
+    // Apply once, exactly when the rule first becomes authoritative.
+    applied += applyKeywordToAll(db, keyword, category)
+  }
+  return { added, applied }
 }
 
 /**

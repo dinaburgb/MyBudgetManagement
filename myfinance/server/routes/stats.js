@@ -20,6 +20,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { netBalance } from '../db/balances.js'
+import { budgetSummaryForMonths } from '../db/budgets.js'
 
 const router = Router()
 
@@ -55,15 +56,39 @@ function resolveSelection(db, req) {
   return { months, accountIds }
 }
 
+/**
+ * Build the category / budget / actual table for the Overview. Budget is the
+ * effective limit summed over the selected months (null when never budgeted);
+ * actual is the expenses already computed for the selected accounts (byCategory).
+ * One row per category that has either a budget or some spending.
+ */
+function buildBudgetTable(db, months, byCategory) {
+  const actual = new Map(byCategory.map(c => [c.category, c.expenses]))
+  const budget = budgetSummaryForMonths(db, months)
+  const cats = new Set([...actual.keys(), ...budget.keys()])
+  return [...cats].map(category => {
+    const limit = budget.has(category) ? budget.get(category) : null
+    const spent = actual.get(category) || 0
+    return {
+      category,
+      budget: limit,
+      actual: spent,
+      remaining: limit != null ? limit - spent : null,
+    }
+  }).sort((a, b) => b.actual - a.actual)
+}
+
 router.get('/overview', (req, res) => {
   const db = getDb()
   const { months, accountIds } = resolveSelection(db, req)
 
-  // Nothing selected → empty result (avoid an empty IN () which is invalid SQL)
+  // Nothing selected → empty result (avoid an empty IN () which is invalid SQL).
+  // Budgets are account-agnostic, so still report them (with zero actuals).
   if (accountIds.length === 0) {
     return res.json({
       months, monthly: months.map(month => ({ month, expenses: 0, income: 0 })),
       byCategory: [], totals: { expenses: 0, income: 0, balance: 0 }, netBalance: 0,
+      budgetTable: buildBudgetTable(db, months, []),
     })
   }
 
@@ -107,7 +132,11 @@ router.get('/overview', (req, res) => {
   }, { expenses: 0, income: 0 })
   totals.balance = totals.income - totals.expenses
 
-  res.json({ months, monthly, byCategory, totals, netBalance: netBalance(db, accountIds) })
+  res.json({
+    months, monthly, byCategory, totals,
+    netBalance: netBalance(db, accountIds),
+    budgetTable: buildBudgetTable(db, months, byCategory),
+  })
 })
 
 /**

@@ -9,7 +9,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth } from '../db/budgets.js'
+import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetCategoryTransactions } from '../db/budgets.js'
 
 const router = Router()
 
@@ -28,6 +28,14 @@ router.get('/overview', (req, res) => {
   const month = isValidMonth(req.query.month) ? req.query.month : currentMonth()
   const rows = computeBudgetOverview(getDb(), month)
   res.json({ month, rows })
+})
+
+/** GET /api/budgets/transactions?category=..&month=YYYY-MM — drill-down rows */
+router.get('/transactions', (req, res) => {
+  const month = isValidMonth(req.query.month) ? req.query.month : currentMonth()
+  const category = req.query.category
+  if (!category) return res.status(400).json({ error: 'category is required' })
+  res.json({ category, month, rows: budgetCategoryTransactions(getDb(), category, month) })
 })
 
 /** PUT /api/budgets — set or update a limit */

@@ -74,6 +74,55 @@ export function computeBudgetOverview(db = getDb(), month) {
 }
 
 /**
+ * Total effective budget per category across a set of months. For each month the
+ * effective limit is the month override if present, else the recurring default.
+ * Limits are summed across the months; a category with no limit in ANY of the
+ * months gets `budget: null` (so the UI can leave the cell empty). For months
+ * where a category has no limit but does in another month, that month contributes
+ * 0 — the sum still reflects only the months it was actually budgeted.
+ *
+ * @param {object} db
+ * @param {string[]} months - array of 'YYYY-MM'
+ * @returns {Map<string, number>} category → summed budget (only categories with one)
+ */
+export function budgetSummaryForMonths(db, months) {
+  const defaultRow = db.prepare(`SELECT category, amount FROM budgets WHERE month = ''`).all()
+  const defaults = new Map(defaultRow.map(r => [r.category, r.amount]))
+
+  const overrideStmt = db.prepare(`SELECT category, amount FROM budgets WHERE month = ?`)
+  const totals = new Map()
+  for (const month of months) {
+    const overrides = new Map(overrideStmt.all(month).map(r => [r.category, r.amount]))
+    // Every category that has a limit this month (override wins over default).
+    const cats = new Set([...defaults.keys(), ...overrides.keys()])
+    for (const cat of cats) {
+      const limit = overrides.has(cat) ? overrides.get(cat) : defaults.get(cat)
+      if (limit == null) continue
+      totals.set(cat, (totals.get(cat) || 0) + limit)
+    }
+  }
+  return totals
+}
+
+/**
+ * The transactions behind a budget row: a category's charges for the given month,
+ * from accounts included in totals (the same set "spent" is computed from),
+ * newest first. Used by the Budgets page drill-down.
+ */
+export function budgetCategoryTransactions(db, category, month) {
+  return db.prepare(`
+    SELECT t.id, t.date, t.description, t.amount, t.account_name, t.source,
+           t.type, t.installment_number, t.installment_total, t.note
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.include_in_totals = 1
+      AND t.category = ?
+      AND substr(t.date, 1, 7) = ?
+    ORDER BY t.date DESC, t.id DESC
+  `).all(category, month)
+}
+
+/**
  * Insert or update a budget limit for a category.
  * month '' sets the recurring default; a 'YYYY-MM' sets a one-month override.
  */

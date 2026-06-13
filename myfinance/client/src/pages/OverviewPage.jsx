@@ -7,7 +7,7 @@ import { TrendingUp, TrendingDown, Scale, Wallet } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
-import NoteEditor from '../NoteEditor.jsx'
+import TxnRow from '../TxnRow.jsx'
 
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 const HE_LONG  = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר']
@@ -81,17 +81,18 @@ export default function OverviewPage() {
     }).catch(() => { setAccounts([]); setSelAccounts(new Set()) })
   }, [])
 
-  // Fetch stats whenever the month or account selection changes.
-  useEffect(() => {
+  // Fetch stats for the current month/account selection.
+  function loadStats() {
     if (selAccounts === null) return
     setLoading(true)
     const months = [...selMonths].sort().join(',')
     const acc = [...selAccounts].join(',')
-    axios.get('/api/stats/overview', { params: { months, accounts: acc } })
+    return axios.get('/api/stats/overview', { params: { months, accounts: acc } })
       .then(res => setData(res.data))
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [selMonths, selAccounts])
+  }
+  useEffect(() => { loadStats() }, [selMonths, selAccounts])
 
   function toggleMonth(key) {
     setSelMonths(prev => {
@@ -135,8 +136,11 @@ export default function OverviewPage() {
       .catch(() => setDrill({ category, rows: [] }))
       .finally(() => setDrillLoading(false))
   }
-  function updateDrillNote(id, note) {
-    setDrill(d => d && ({ ...d, rows: d.rows.map(r => r.id === id ? { ...r, note } : r) }))
+  // A category change inside the drill-down changes the totals and which rows
+  // belong to the category — refresh both the stats and the open drill list.
+  function onTxnChanged() {
+    loadStats()
+    if (drill) openDrill(drill.category)
   }
 
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
@@ -275,9 +279,49 @@ export default function OverviewPage() {
             </div>
           </div>
 
+          {/* Budget vs. actual table for the selected period */}
+          {data.budgetTable?.length > 0 && (
+            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
+              <h3 className="text-white font-medium mb-1">תקציב מול ביצוע</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                סכום על פני {selMonths.size} חודשים שנבחרו. תא ריק = לא הוגדר תקציב.
+              </p>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-400 border-b border-gray-800">
+                    <th className="text-right py-2 font-medium">קטגוריה</th>
+                    <th className="text-left py-2 font-medium">תקציב</th>
+                    <th className="text-left py-2 font-medium">ביצוע</th>
+                    <th className="text-left py-2 font-medium">נותר</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.budgetTable.map(r => {
+                    const over = r.remaining != null && r.remaining < 0
+                    return (
+                      <tr key={r.category} className="border-b border-gray-800/50">
+                        <td className="py-2 text-white">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: colorFor(r.category) }} />
+                            {r.category}
+                          </span>
+                        </td>
+                        <td className="py-2 text-left font-mono text-gray-300">{r.budget != null ? ils(r.budget) : ''}</td>
+                        <td className="py-2 text-left font-mono text-gray-300">{ils(r.actual)}</td>
+                        <td className={`py-2 text-left font-mono ${r.remaining == null ? 'text-gray-600' : over ? 'text-red-400' : 'text-green-400'}`}>
+                          {r.remaining == null ? '' : over ? `חריגה ${ils(-r.remaining)}` : ils(r.remaining)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {/* Drill-down: transactions for the clicked category */}
           {drill && (
-            <div className="bg-gray-900 rounded-xl p-5 mt-6">
+            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-white font-medium flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
@@ -295,24 +339,7 @@ export default function OverviewPage() {
                   <table className="w-full text-sm">
                     <tbody>
                       {drill.rows.map(r => (
-                        <tr key={r.id} className="border-b border-gray-800/50">
-                          <td className="py-2 pl-3 text-gray-400 whitespace-nowrap align-top">{r.date}</td>
-                          <td className="py-2 text-white">
-                            <div>{r.description}</div>
-                            {r.type === 'installment' && r.installment_total > 1 && (
-                              <span className="text-xs text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
-                                תשלום {r.installment_number} מתוך {r.installment_total}
-                              </span>
-                            )}
-                            <span className="text-gray-600 text-xs"> · {r.account_name}</span>
-                            <div className="mt-1">
-                              <NoteEditor id={r.id} note={r.note} onSaved={n => updateDrillNote(r.id, n)} />
-                            </div>
-                          </td>
-                          <td className={`py-2 text-left font-mono whitespace-nowrap align-top ${r.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                            {r.amount < 0 ? '-' : '+'}{ils(Math.abs(r.amount))}
-                          </td>
-                        </tr>
+                        <TxnRow key={r.id} txn={r} onChanged={onTxnChanged} />
                       ))}
                     </tbody>
                   </table>

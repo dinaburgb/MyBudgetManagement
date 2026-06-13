@@ -12,6 +12,7 @@ import {
   loadRules, categorizeDescription, seedDefaultRules, recategorizeAll, DEFAULT_RULES,
   normalizeCategory, migrateCategoriesToHebrew, OTHER_CATEGORY,
   applyRuleToUncategorized, applyKeywordToAll,
+  ensureEssentialRules, ESSENTIAL_RULES, AUTHORITATIVE_PRIORITY, matchRule,
 } from '../server/db/categorize.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 
@@ -213,6 +214,69 @@ test('applyKeywordToAll overrides already-categorized matching rows', () => {
   const n = applyKeywordToAll(db, 'מוסך', 'רכב')
   assert.strictEqual(n, 2)  // both מוסך rows moved, including the one set to תחבורה
   assert.strictEqual(db.prepare(`SELECT COUNT(*) c FROM transactions WHERE category='רכב'`).get().c, 2)
+})
+
+test('an authoritative rule overrides the scraper-provided category on import', () => {
+  const db = freshDb()
+  // High-priority rule: רב קו → ילדים, even though the scraper says תחבורה.
+  addRule(db, 'רב קו', 'ילדים', AUTHORITATIVE_PRIORITY)
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ description: 'רב קו אונליין', category: 'רכב ותחבורה' }),  // scraper → תחבורה
+    txn({ description: 'משהו אחר', category: 'מזון ומשקאות', chargedAmount: -20 }),
+  ] }, db)
+  const rows = db.prepare('SELECT description, category FROM transactions ORDER BY id').all()
+  assert.strictEqual(rows[0].category, 'ילדים')  // authoritative rule won
+  assert.strictEqual(rows[1].category, 'מזון')   // no override → scraper category kept
+})
+
+test('a normal-priority rule does NOT override the scraper category', () => {
+  const db = freshDb()
+  addRule(db, 'רב קו', 'ילדים', 0)  // normal priority
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ description: 'רב קו אונליין', category: 'רכב ותחבורה' }),
+  ] }, db)
+  assert.strictEqual(db.prepare('SELECT category FROM transactions').get().category, 'תחבורה')
+})
+
+test('matchRule returns the winning rule object with its priority', () => {
+  const db = freshDb()
+  addRule(db, 'מוסך', 'רכב', AUTHORITATIVE_PRIORITY)
+  const rules = loadRules(db)
+  const m = matchRule('פריים מוטורס בעמ-מוסך חיפ', rules)
+  assert.strictEqual(m.category, 'רכב')
+  assert.strictEqual(m.priority, AUTHORITATIVE_PRIORITY)
+  assert.strictEqual(matchRule('שום התאמה כאן', rules), null)
+})
+
+test('ensureEssentialRules adds authoritative rules and re-categorizes existing rows', () => {
+  const db = freshDb()
+  // Existing data sitting in the wrong place (as the real DB had it).
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ description: 'רב קו אונליין', category: 'רכב ותחבורה' }),                  // → תחבורה
+    txn({ description: 'פריים מוטורס בעמ-מוסך חיפ', category: 'רכב ותחבורה', chargedAmount: -300 }),
+  ] }, db)
+  const res = ensureEssentialRules(db)
+  assert.ok(res.added >= 2)
+  assert.ok(res.applied >= 2)
+  const cats = db.prepare('SELECT description, category FROM transactions ORDER BY id').all()
+  assert.strictEqual(cats[0].category, 'ילדים')  // רב קו moved
+  assert.strictEqual(cats[1].category, 'רכב')    // מוסך moved
+  // Idempotent: a second run adds nothing.
+  const again = ensureEssentialRules(db)
+  assert.strictEqual(again.added, 0)
+  // The seeded rules are authoritative.
+  const prio = db.prepare(`SELECT priority FROM category_rules WHERE keyword = 'רב קו'`).get().priority
+  assert.strictEqual(prio, AUTHORITATIVE_PRIORITY)
+})
+
+test('ESSENTIAL_RULES route רב קו to ילדים and car keywords to רכב', () => {
+  const carKeywords = ['דלק', 'מוסך', 'פנגו', 'משרד התחבורה']
+  for (const kw of carKeywords) {
+    const found = ESSENTIAL_RULES.find(([k]) => k === kw)
+    assert.ok(found, `expected an essential rule for "${kw}"`)
+    assert.strictEqual(found[1], 'רכב')
+  }
+  assert.deepStrictEqual(ESSENTIAL_RULES.find(([k]) => k === 'רב קו'), ['רב קו', 'ילדים'])
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

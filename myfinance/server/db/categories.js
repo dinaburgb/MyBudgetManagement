@@ -113,16 +113,26 @@ export function updateCategory(db, id, { name, color }) {
   }
 }
 
-/** Delete a category and move its data to 'אחר'. System categories can't be deleted. */
-export function deleteCategory(db, id) {
+/**
+ * Delete a category and move its data to another category. `target` is the
+ * destination category name; when omitted (or invalid) the data goes to 'אחר'.
+ * System categories can't be deleted, and a category can't be moved into itself.
+ */
+export function deleteCategory(db, id, target) {
   const cat = db.prepare(`SELECT * FROM categories WHERE id = ?`).get(id)
   if (!cat) throw Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
   if (cat.is_system) throw Object.assign(new Error('system category'), { code: 'SYSTEM' })
 
+  // Resolve the destination: a real, different category, else fall back to 'אחר'.
+  let dest = (target || '').trim()
+  if (!dest || dest === cat.name || !db.prepare(`SELECT 1 FROM categories WHERE name = ?`).get(dest)) {
+    dest = OTHER_CATEGORY
+  }
+
   db.exec('BEGIN')
   try {
-    db.prepare(`UPDATE transactions   SET category = ? WHERE category = ?`).run(OTHER_CATEGORY, cat.name)
-    db.prepare(`UPDATE category_rules SET category = ? WHERE category = ?`).run(OTHER_CATEGORY, cat.name)
+    db.prepare(`UPDATE transactions   SET category = ? WHERE category = ?`).run(dest, cat.name)
+    db.prepare(`UPDATE category_rules SET category = ? WHERE category = ?`).run(dest, cat.name)
     db.prepare(`DELETE FROM budgets WHERE category = ?`).run(cat.name)
     db.prepare(`DELETE FROM categories WHERE id = ?`).run(id)
     db.exec('COMMIT')
@@ -130,4 +140,5 @@ export function deleteCategory(db, id) {
     db.exec('ROLLBACK')
     throw err
   }
+  return { dest }
 }

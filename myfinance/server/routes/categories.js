@@ -12,7 +12,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll } from '../db/categorize.js'
+import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll, AUTHORITATIVE_PRIORITY } from '../db/categorize.js'
 import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
 
 const router = Router()
@@ -53,11 +53,12 @@ router.put('/:id', (req, res) => {
   }
 })
 
-/** DELETE /api/categories/:id — delete and move its data to 'אחר' */
+/** DELETE /api/categories/:id?target=NAME — delete, moving its data to target (default 'אחר') */
 router.delete('/:id', (req, res) => {
   try {
-    deleteCategory(getDb(), req.params.id)
-    res.json({ message: 'Category deleted' })
+    const target = req.query.target || req.body?.target
+    const { dest } = deleteCategory(getDb(), req.params.id, target)
+    res.json({ message: 'Category deleted', movedTo: dest })
   } catch (err) {
     if (err.code === 'SYSTEM')    return res.status(400).json({ error: 'לא ניתן למחוק קטגוריית מערכת' })
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: 'Category not found' })
@@ -83,9 +84,14 @@ router.post('/rules', (req, res) => {
   }
   const db = getDb()
   const kw = keyword.trim(), cat = category.trim()
+  // 'all' mode makes the rule authoritative (high priority) so it also wins over
+  // the scraper's own category on future imports — not just a one-time fix.
+  const prio = req.body.applyMode === 'all'
+    ? Math.max(Number(priority) || 0, AUTHORITATIVE_PRIORITY)
+    : Number(priority) || 0
   const result = db.prepare(
     `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
-  ).run(kw, cat, Number(priority) || 0)
+  ).run(kw, cat, prio)
   // Apply the new rule to existing transactions right away. Default touches only
   // uncategorized rows; 'all' overrides already-categorized matches too (used to
   // pull charges into a category like רכב from wherever they currently sit).
