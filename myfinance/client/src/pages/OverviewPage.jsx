@@ -279,9 +279,13 @@ export default function OverviewPage() {
             </div>
           </div>
 
+          {/* Budget table and drill-down — side by side when both are shown */}
+          {(data.budgetTable?.length > 0 || drill) && (
+          <div className={`mt-6 grid gap-6 items-start ${data.budgetTable?.length > 0 && drill ? 'lg:grid-cols-2' : 'max-w-2xl'}`}>
+
           {/* Budget vs. actual table for the selected period */}
           {data.budgetTable?.length > 0 && (
-            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
+            <div className="bg-gray-900 rounded-xl p-5">
               <h3 className="text-white font-medium mb-1">תקציב מול ביצוע</h3>
               <p className="text-xs text-gray-500 mb-3">
                 סכום על פני {selMonths.size} חודשים שנבחרו. תא ריק = לא הוגדר תקציב.
@@ -297,19 +301,21 @@ export default function OverviewPage() {
                 </thead>
                 <tbody>
                   {data.budgetTable.map(r => {
-                    const over = r.remaining != null && r.remaining < 0
+                    const isIncome = r.kind === 'income'
+                    const over = !isIncome && r.remaining != null && r.remaining < 0
                     return (
                       <tr key={r.category} className="border-b border-gray-800/50">
                         <td className="py-2 text-white">
                           <span className="inline-flex items-center gap-2">
                             <span className="w-2.5 h-2.5 rounded-full" style={{ background: colorFor(r.category) }} />
                             {r.category}
+                            {isIncome && <span className="text-[11px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">הכנסה</span>}
                           </span>
                         </td>
                         <td className="py-2 text-left font-mono text-gray-300">{r.budget != null ? ils(r.budget) : ''}</td>
-                        <td className="py-2 text-left font-mono text-gray-300">{ils(r.actual)}</td>
-                        <td className={`py-2 text-left font-mono ${r.remaining == null ? 'text-gray-600' : over ? 'text-red-400' : 'text-green-400'}`}>
-                          {r.remaining == null ? '' : over ? `חריגה ${ils(-r.remaining)}` : ils(r.remaining)}
+                        <td className={`py-2 text-left font-mono ${isIncome ? 'text-emerald-400' : 'text-gray-300'}`}>{ils(r.actual)}</td>
+                        <td className={`py-2 text-left font-mono ${r.remaining == null ? 'text-gray-600' : isIncome ? 'text-gray-400' : over ? 'text-red-400' : 'text-green-400'}`}>
+                          {r.remaining == null ? '' : isIncome ? ils(r.remaining) : over ? `חריגה ${ils(-r.remaining)}` : ils(r.remaining)}
                         </td>
                       </tr>
                     )
@@ -321,7 +327,7 @@ export default function OverviewPage() {
 
           {/* Drill-down: transactions for the clicked category */}
           {drill && (
-            <div className="bg-gray-900 rounded-xl p-5 mt-6 max-w-2xl">
+            <div className="bg-gray-900 rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-white font-medium flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
@@ -346,6 +352,9 @@ export default function OverviewPage() {
                 </div>
               )}
             </div>
+          )}
+
+          </div>
           )}
         </>
       )}

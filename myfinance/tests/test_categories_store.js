@@ -9,6 +9,7 @@ import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import {
   seedCategories, listCategoryNames, addCategory, updateCategory, deleteCategory,
+  listCategories, incomeCategoryNames,
 } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -113,6 +114,22 @@ test('delete with an unknown / empty target falls back to אחר', () => {
 test('system category אחר cannot be deleted', () => {
   const db = freshDb()
   assert.throws(() => deleteCategory(db, catId(db, 'אחר')), e => e.code === 'SYSTEM')
+})
+
+test('is_income flag is settable, listed, and rename keeps it', () => {
+  const db = freshDb()
+  addCategory(db, 'הכנסות', '#22c55e')
+  // default not income
+  assert.ok(!incomeCategoryNames(db).includes('הכנסות'))
+  updateCategory(db, catId(db, 'הכנסות'), { is_income: true })
+  assert.ok(incomeCategoryNames(db).includes('הכנסות'))
+  assert.strictEqual(listCategories(db).find(c => c.name === 'הכנסות').is_income, 1)
+  // rename preserves the income flag
+  updateCategory(db, catId(db, 'הכנסות'), { name: 'משכורת' })
+  assert.ok(incomeCategoryNames(db).includes('משכורת'))
+  // can be turned back off
+  updateCategory(db, catId(db, 'משכורת'), { is_income: false })
+  assert.ok(!incomeCategoryNames(db).includes('משכורת'))
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

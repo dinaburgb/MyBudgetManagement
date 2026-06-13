@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name       TEXT NOT NULL UNIQUE,
   color      TEXT,                       -- hex color for charts
   is_system  INTEGER NOT NULL DEFAULT 0, -- 1 = cannot be deleted (e.g. 'אחר')
+  is_income  INTEGER NOT NULL DEFAULT 0, -- 1 = income category (kept out of the expense pie)
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -103,6 +104,17 @@ CREATE TABLE IF NOT EXISTS budgets (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(category, month)
+);
+
+-- Sub-account exclusions. One bank login (accounts row) can expose several
+-- account numbers (e.g. Discount returns 3). A row here means "exclude this
+-- specific account number from totals", even though its parent login is included.
+-- Absence = included (the default), so this table only lists the exceptions.
+CREATE TABLE IF NOT EXISTS excluded_subaccounts (
+  account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, account_number)
 );
 
 -- Activity log — NO sensitive data, only operational events

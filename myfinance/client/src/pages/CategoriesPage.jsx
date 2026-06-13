@@ -13,6 +13,7 @@ function CategoryManager({ onChanged }) {
   const [editId,   setEditId]   = useState(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('#60a5fa')
+  const [editIncome, setEditIncome] = useState(false)
   const [removing, setRemoving] = useState(null)        // category being deleted
   const [moveTarget, setMoveTarget] = useState('אחר')   // where its transactions go
 
@@ -31,12 +32,15 @@ function CategoryManager({ onChanged }) {
     }
   }
 
-  function startEdit(c) { setEditId(c.id); setEditName(c.name); setEditColor(c.color || '#60a5fa'); setError('') }
+  function startEdit(c) {
+    setEditId(c.id); setEditName(c.name); setEditColor(c.color || '#60a5fa')
+    setEditIncome(!!c.is_income); setError('')
+  }
 
   async function saveEdit() {
     setError('')
     try {
-      await axios.put(`/api/categories/${editId}`, { name: editName.trim(), color: editColor })
+      await axios.put(`/api/categories/${editId}`, { name: editName.trim(), color: editColor, is_income: editIncome })
       setEditId(null)
       refresh()
     } catch (err) {
@@ -123,6 +127,10 @@ function CategoryManager({ onChanged }) {
               <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditId(null) }}
                      className="bg-gray-700 text-white rounded px-2 py-1 text-sm outline-none w-28" autoFocus />
+              <label className="flex items-center gap-1 text-xs text-gray-300 cursor-pointer select-none" title="קטגוריית הכנסה — לא תיכלל בעוגת ההוצאות">
+                <input type="checkbox" checked={editIncome} onChange={e => setEditIncome(e.target.checked)} className="w-3.5 h-3.5 accent-emerald-600" />
+                הכנסה
+              </label>
               <button onClick={saveEdit} className="text-green-400 hover:text-green-300"><Check className="w-4 h-4" /></button>
               <button onClick={() => setEditId(null)} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
@@ -130,6 +138,7 @@ function CategoryManager({ onChanged }) {
             <div key={c.id} className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-1.5 group">
               <span className="w-3 h-3 rounded-full" style={{ background: c.color || '#94a3b8' }} />
               <span className="text-white text-sm">{c.name}</span>
+              {c.is_income === 1 && <span className="text-[11px] text-emerald-400 bg-emerald-500/10 rounded px-1.5 py-0.5">הכנסה</span>}
               {c.is_system ? (
                 <span className="text-gray-600 text-xs">(מערכת)</span>
               ) : (

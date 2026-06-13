@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 
@@ -32,6 +32,11 @@ const CREDENTIAL_FIELDS = {
 }
 
 const PRESET_OWNERS = ['Boris', 'Irena', 'Joint']
+
+// Credit-card sources show one "account number" per card, so we word the
+// sub-account breakdown as cards rather than accounts.
+const CARD_SOURCES = new Set(['cal', 'isracard', 'max'])
+const isCard = source => CARD_SOURCES.has(source)
 
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
@@ -255,6 +260,33 @@ export default function AccountsPage() {
     load()
   }
 
+  // Sub-accounts (account numbers under one login) — expand & toggle inclusion.
+  const [subOpen, setSubOpen] = useState(() => new Set())
+  const [subData, setSubData] = useState({})   // account_id -> [{ account_number, included, ... }]
+
+  async function loadSubs(id) {
+    try {
+      const res = await axios.get(`/api/accounts/${id}/subaccounts`)
+      setSubData(prev => ({ ...prev, [id]: res.data }))
+    } catch { /* leave undefined */ }
+  }
+  async function toggleSubOpen(id) {
+    setSubOpen(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    if (!subData[id]) await loadSubs(id)
+  }
+  async function toggleSubInclude(accId, number, include) {
+    setSubData(prev => ({
+      ...prev,
+      [accId]: prev[accId].map(s => s.account_number === number ? { ...s, included: include } : s),
+    }))
+    try {
+      await axios.put(`/api/accounts/${accId}/subaccounts`, { account_number: number, include })
+    } catch {
+      loadSubs(accId)
+    }
+    load()  // refresh login-level balance / excluded badge
+  }
+
   // Toggle whether this account is included in totals/summaries
   async function toggleInTotals(acc) {
     const next = acc.include_in_totals ? 0 : 1
@@ -423,6 +455,62 @@ export default function AccountsPage() {
                   <span className="text-amber-500/80 text-xs">(לא נכלל)</span>
                 )}
               </label>
+
+              {/* Sub-accounts: only when this login exposes more than one number */}
+              {acc.subaccount_count > 1 && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => toggleSubOpen(acc.id)}
+                    className="flex items-center gap-1.5 text-sm text-gray-300 hover:text-white transition-colors"
+                  >
+                    {subOpen.has(acc.id)
+                      ? <ChevronDown className="w-4 h-4 text-gray-500" />
+                      : <ChevronLeft className="w-4 h-4 text-gray-500" />}
+                    {isCard(acc.source) ? 'פירוט כרטיסים' : 'פירוט חשבונות'} ({acc.subaccount_count})
+                    {acc.excluded_count > 0 && (
+                      <span className="text-amber-500/80 text-xs">— {acc.excluded_count} לא נכללים</span>
+                    )}
+                  </button>
+
+                  {subOpen.has(acc.id) && (
+                    <div className="mt-2 bg-gray-800 rounded-lg p-3 space-y-2">
+                      {!subData[acc.id] ? (
+                        <div className="text-gray-400 text-sm">טוען…</div>
+                      ) : subData[acc.id].length === 0 ? (
+                        <div className="text-gray-500 text-sm">לא נמצאו מספרי חשבון.</div>
+                      ) : (
+                        <>
+                          {!acc.include_in_totals && (
+                            <p className="text-xs text-amber-500/80">
+                              ההתחברות כולה לא נכללת — הסימון כאן ישפיע רק כשתחזיר אותה לחישוב.
+                            </p>
+                          )}
+                          {subData[acc.id].map(s => (
+                            <label key={s.account_number} className="flex items-center justify-between gap-3 cursor-pointer select-none">
+                              <span className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                  type="checkbox"
+                                  checked={s.included}
+                                  onChange={() => toggleSubInclude(acc.id, s.account_number, !s.included)}
+                                  className="w-4 h-4 accent-blue-600"
+                                />
+                                <span className="font-mono">{s.account_number}</span>
+                                <span className="text-gray-500 text-xs">· {s.txn_count} תנועות</span>
+                                {!s.included && <span className="text-amber-500/80 text-xs">(לא נכלל)</span>}
+                              </span>
+                              {s.balance != null && (
+                                <span className={`font-mono text-sm ${s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                  {ils(s.balance)}
+                                </span>
+                              )}
+                            </label>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Delete / clean confirmation */}
               {confirmId === acc.id && (
