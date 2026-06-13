@@ -8,7 +8,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
-import { saveAccountTransactions } from '../server/db/save-transactions.js'
+import { saveAccountTransactions, insertManualTransaction } from '../server/db/save-transactions.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -44,6 +44,38 @@ function txn(over = {}) {
 }
 
 console.log('\nTransaction save & dedup tests:')
+
+test('insertManualTransaction adds a cash expense (no account)', () => {
+  const db = freshDb()
+  const id = insertManualTransaction(db, {
+    date: '2026-06-12', description: 'קנייה בשוק', amount: -80, category: 'מזון', owner: 'Boris',
+  })
+  const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
+  assert.strictEqual(row.source, 'manual')
+  assert.strictEqual(row.amount, -80)
+  assert.strictEqual(row.category, 'מזון')
+  assert.strictEqual(row.account_id, null)
+  assert.strictEqual(row.account_name, 'מזומן')   // cash default
+  assert.ok(String(row.dedup_key).startsWith('manual:'))
+})
+
+test('two identical manual entries are both kept (random dedup key)', () => {
+  const db = freshDb()
+  insertManualTransaction(db, { date: '2026-06-12', description: 'x', amount: -10 })
+  insertManualTransaction(db, { date: '2026-06-12', description: 'x', amount: -10 })
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 2)
+})
+
+test('manual entry can be attached to an account', () => {
+  const db = freshDb()
+  const id = insertManualTransaction(db, {
+    date: '2026-06-12', description: 'הפקדה', amount: 500, owner: 'Irena',
+    account_id: 1, account_name: 'Discount — Boris',
+  })
+  const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
+  assert.strictEqual(row.account_id, 1)
+  assert.strictEqual(row.amount, 500)
+})
 
 test('inserts new transactions', () => {
   const db = freshDb()

@@ -7,6 +7,7 @@ import BudgetsPage from './BudgetsPage.jsx'
 import OverviewPage from './OverviewPage.jsx'
 import ComparePage from './ComparePage.jsx'
 import { CategoriesProvider } from '../CategoriesContext.jsx'
+import { DISCLAIMER_SHORT } from '../legal.js'
 import axios from 'axios'
 
 const TABS = [
@@ -71,6 +72,11 @@ export default function Dashboard({ onLock }) {
         {activeTab === 'categories'   && <CategoriesPage />}
         {activeTab === 'budgets'      && <BudgetsPage />}
       </main>
+
+      {/* Short disclaimer at the bottom of every tab */}
+      <footer className="px-6 py-4 text-center text-gray-600 text-xs border-t border-gray-800/60">
+        {DISCLAIMER_SHORT}
+      </footer>
     </div>
     </CategoriesProvider>
   )

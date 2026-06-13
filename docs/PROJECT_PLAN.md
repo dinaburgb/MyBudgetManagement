@@ -105,6 +105,41 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Security hardening + manual entry + prefix search (2026-06-13):**
+  - H5 — safe unlock: `unlockOrInit` never re-initialises while encrypted
+    credentials exist; a lost sentinel is only recreated if the entered password
+    actually decrypts a stored credential, else it's a wrong password (no metadata
+    touched). Crypto data dir is overridable via `MYFINANCE_CRYPTO_DIR` for tests.
+  - H3/H4 — a lightweight same-origin guard rejects cross-site `POST/PUT/PATCH/DELETE`
+    (Origin + Sec-Fetch-Site), and the WebSocket rejects unknown origins. No tokens.
+  - M4 — CSV export neutralises formula injection (`server/util/csv.js`, `csvSafeText`).
+  - M7 — budgets `currentMonth()` uses local time, not UTC.
+  - M6 — input validation: transactions pagination capped (limit 1..500, page>=1);
+    budget amount must be finite and non-negative.
+  - Manual entry: `POST /api/transactions` + `insertManualTransaction` (source
+    'manual', random dedup key) for cash etc.; `ManualTxnForm.jsx` on the
+    Transactions page (date/desc/amount/expense-income/category/owner/account).
+  - Transactions search is now a prefix match (`description LIKE 'term%'`, wildcards
+    escaped).
+  - `.gitattributes` (eol=lf) to stop CRLF-only diffs; README privacy model +
+    `git archive` safe-export; untracked the external review brief.
+  - Tests: `test_auth.js` (3, H5), `test_csv.js` (5), +3 manual-entry in
+    test_save_transactions. Full suite: 10 files passing.
+- **Multi-filters, master-password change/reset, disclaimer (2026-06-13):**
+  - Transactions filters for owner / category / account are now multi-select
+    (`client/src/MultiSelect.jsx`); the owners list is derived from the accounts
+    (no hardcoded Boris/Irena/Joint). Server `/api/transactions` accepts
+    comma-separated `owner`, `category`, `account_id` (built as `IN (...)`).
+  - Master (app) password: `POST /api/auth/change-password` re-encrypts all stored
+    bank credentials under the new key (`changeMasterPassword`); `POST /api/auth/reset`
+    is the "forgot password" path — wipes salt+sentinel and the unrecoverable
+    encrypted credentials but KEEPS all financial data (`resetMasterPassword`).
+    `/api/auth/status` now also returns `passwordSet`. Both flows are on the lock
+    screen (change / "שכחתי סיסמה").
+  - Disclaimer: full "as-is, no warranty, use at own risk, not financial advice"
+    text on the lock screen with a required acceptance checkbox (gates entry); a
+    short version (`DISCLAIMER_SHORT` in `client/src/legal.js`) in a footer on every
+    tab.
 - **Apply-rule prompt + income categories (2026-06-13):**
   - After a category is changed from any transaction list (Transactions table,
     Overview/Budgets drill-downs), a prompt offers to turn it into an authoritative
