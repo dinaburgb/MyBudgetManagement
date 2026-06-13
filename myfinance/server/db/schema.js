@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS categories (
   name       TEXT NOT NULL UNIQUE,
   color      TEXT,                       -- hex color for charts
   is_system  INTEGER NOT NULL DEFAULT 0, -- 1 = cannot be deleted (e.g. 'אחר')
+  is_income  INTEGER NOT NULL DEFAULT 0, -- 1 = income category (kept out of the expense pie)
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

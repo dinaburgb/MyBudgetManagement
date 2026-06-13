@@ -3,6 +3,7 @@ import axios from 'axios'
 import { ils } from './colors.js'
 import { useCategories } from './CategoriesContext.jsx'
 import NoteEditor from './NoteEditor.jsx'
+import ApplyRulePrompt from './ApplyRulePrompt.jsx'
 
 /**
  * One compact transaction row for the drill-down lists (Overview, Budgets).
@@ -14,12 +15,14 @@ export default function TxnRow({ txn, showAccount = true, onChanged }) {
   const { names } = useCategories()
   const [cat,  setCat]  = useState(txn.category)
   const [note, setNote] = useState(txn.note)
+  const [askRule, setAskRule] = useState(false)
 
   async function changeCategory(next) {
     if (next === cat) return
     setCat(next)
     try {
       await axios.put(`/api/transactions/${txn.id}/category`, { category: next })
+      setAskRule(true)        // offer to apply the change to all similar transactions
       onChanged?.(txn.id, next)
     } catch {
       setCat(txn.category)  // revert on failure
@@ -44,6 +47,14 @@ export default function TxnRow({ txn, showAccount = true, onChanged }) {
         <div className="mt-1">
           <NoteEditor id={txn.id} note={note} onSaved={setNote} />
         </div>
+        {askRule && (
+          <ApplyRulePrompt
+            description={txn.description}
+            category={cat}
+            onApplied={() => onChanged?.()}
+            onClose={() => setAskRule(false)}
+          />
+        )}
       </td>
       <td className="py-2 align-top">
         <select

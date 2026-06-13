@@ -45,6 +45,13 @@ function runSchemaMigrations(db) {
     db.exec(`ALTER TABLE transactions ADD COLUMN note TEXT DEFAULT ''`)
     console.log('Migration: added transactions.note')
   }
+
+  if (!hasColumn('categories', 'is_income')) {
+    db.exec(`ALTER TABLE categories ADD COLUMN is_income INTEGER NOT NULL DEFAULT 0`)
+    // Mark an existing user-created 'הכנסות' category as income (one-time, on add).
+    db.exec(`UPDATE categories SET is_income = 1 WHERE name = 'הכנסות'`)
+    console.log('Migration: added categories.is_income')
+  }
 }
 
 /** Get the active database connection. Throws if not yet opened. */

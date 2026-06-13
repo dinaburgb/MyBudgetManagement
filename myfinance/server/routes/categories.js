@@ -45,7 +45,7 @@ router.post('/', (req, res) => {
 /** PUT /api/categories/:id — rename and/or recolor { name?, color? } */
 router.put('/:id', (req, res) => {
   try {
-    updateCategory(getDb(), req.params.id, { name: req.body.name, color: req.body.color })
+    updateCategory(getDb(), req.params.id, { name: req.body.name, color: req.body.color, is_income: req.body.is_income })
     res.json({ message: 'Category updated' })
   } catch (err) {
     if (err.code === 'EXISTS')    return res.status(409).json({ error: 'הקטגוריה כבר קיימת' })

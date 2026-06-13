@@ -21,6 +21,7 @@ import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { netBalance } from '../db/balances.js'
 import { budgetSummaryForMonths } from '../db/budgets.js'
+import { incomeCategoryNames } from '../db/categories.js'
 import { notExcludedSql } from '../db/subaccounts.js'
 
 // Sub-account exclusion fragment for the (un-aliased) transactions table.
@@ -62,22 +63,27 @@ function resolveSelection(db, req) {
 
 /**
  * Build the category / budget / actual table for the Overview. Budget is the
- * effective limit summed over the selected months (null when never budgeted);
- * actual is the expenses already computed for the selected accounts (byCategory).
- * One row per category that has either a budget or some spending.
+ * effective limit summed over the selected months (null when never budgeted).
+ * "Actual" is expenses for normal categories, but the income sum for categories
+ * flagged as income — so an income category gets a row with its earnings, while
+ * still being kept out of the expense pie. One row per category that has a
+ * budget, some spending, or (for income categories) some income.
  */
-function buildBudgetTable(db, months, byCategory) {
-  const actual = new Map(byCategory.map(c => [c.category, c.expenses]))
-  const budget = budgetSummaryForMonths(db, months)
-  const cats = new Set([...actual.keys(), ...budget.keys()])
+function buildBudgetTable(db, months, expenseRows, incomeRows, incomeSet) {
+  const expense = new Map(expenseRows.map(c => [c.category, c.expenses]))
+  const income  = new Map(incomeRows.map(c => [c.category, c.income]))
+  const budget  = budgetSummaryForMonths(db, months)
+  const cats = new Set([...expense.keys(), ...income.keys(), ...budget.keys()])
   return [...cats].map(category => {
-    const limit = budget.has(category) ? budget.get(category) : null
-    const spent = actual.get(category) || 0
+    const isIncome = incomeSet.has(category)
+    const limit  = budget.has(category) ? budget.get(category) : null
+    const actual = isIncome ? (income.get(category) || 0) : (expense.get(category) || 0)
     return {
       category,
+      kind: isIncome ? 'income' : 'expense',
       budget: limit,
-      actual: spent,
-      remaining: limit != null ? limit - spent : null,
+      actual,
+      remaining: limit != null ? limit - actual : null,
     }
   }).sort((a, b) => b.actual - a.actual)
 }
@@ -88,11 +94,12 @@ router.get('/overview', (req, res) => {
 
   // Nothing selected → empty result (avoid an empty IN () which is invalid SQL).
   // Budgets are account-agnostic, so still report them (with zero actuals).
+  const incomeSet = new Set(incomeCategoryNames(db))
   if (accountIds.length === 0) {
     return res.json({
       months, monthly: months.map(month => ({ month, expenses: 0, income: 0 })),
       byCategory: [], totals: { expenses: 0, income: 0, balance: 0 }, netBalance: 0,
-      budgetTable: buildBudgetTable(db, months, []),
+      budgetTable: buildBudgetTable(db, months, [], [], incomeSet),
     })
   }
 
@@ -119,7 +126,7 @@ router.get('/overview', (req, res) => {
   }))
 
   // Expenses by category over the selected months/accounts
-  const byCategory = db.prepare(`
+  const expenseByCategory = db.prepare(`
     SELECT category,
            SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS expenses
     FROM transactions
@@ -131,6 +138,26 @@ router.get('/overview', (req, res) => {
     ORDER BY expenses DESC
   `).all(...params)
 
+  // Income per income-flagged category (for the budget table's "actual").
+  let incomeByCategory = []
+  const incomeCats = [...incomeSet]
+  if (incomeCats.length) {
+    const iP = incomeCats.map(() => '?').join(',')
+    incomeByCategory = db.prepare(`
+      SELECT category, SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income
+      FROM transactions
+      WHERE substr(date, 1, 7) IN (${mPlaceholders})
+        AND account_id IN (${aPlaceholders})
+        AND ${NOT_EXCLUDED}
+        AND category IN (${iP})
+      GROUP BY category
+      HAVING income > 0
+    `).all(...params, ...incomeCats)
+  }
+
+  // The pie shows expenses only — income categories are kept out of it.
+  const byCategory = expenseByCategory.filter(c => !incomeSet.has(c.category))
+
   const totals = monthly.reduce((acc, m) => {
     acc.expenses += m.expenses
     acc.income   += m.income
@@ -141,7 +168,7 @@ router.get('/overview', (req, res) => {
   res.json({
     months, monthly, byCategory, totals,
     netBalance: netBalance(db, accountIds),
-    budgetTable: buildBudgetTable(db, months, byCategory),
+    budgetTable: buildBudgetTable(db, months, expenseByCategory, incomeByCategory, incomeSet),
   })
 })
 

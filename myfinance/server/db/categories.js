@@ -62,13 +62,18 @@ export function migrateFuelToVehicle(db = getDb()) {
 /** All categories, ordered for display. */
 export function listCategories(db = getDb()) {
   return db.prepare(
-    `SELECT id, name, color, is_system FROM categories ORDER BY sort_order, id`
+    `SELECT id, name, color, is_system, is_income FROM categories ORDER BY sort_order, id`
   ).all()
 }
 
 /** Just the category names (used where only names are needed). */
 export function listCategoryNames(db = getDb()) {
   return listCategories(db).map(c => c.name)
+}
+
+/** Names of categories flagged as income (kept out of the expense pie). */
+export function incomeCategoryNames(db = getDb()) {
+  return db.prepare(`SELECT name FROM categories WHERE is_income = 1`).all().map(r => r.name)
 }
 
 /** Add a new category. Throws { code } on bad input or a duplicate name. */
@@ -86,8 +91,8 @@ export function addCategory(db, name, color) {
   return { id: r.lastInsertRowid }
 }
 
-/** Rename and/or recolor a category, propagating a rename to all data. */
-export function updateCategory(db, id, { name, color }) {
+/** Rename, recolor, and/or set the income flag of a category. A rename propagates to all data. */
+export function updateCategory(db, id, { name, color, is_income }) {
   const cat = db.prepare(`SELECT * FROM categories WHERE id = ?`).get(id)
   if (!cat) throw Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
 
@@ -104,8 +109,9 @@ export function updateCategory(db, id, { name, color }) {
       db.prepare(`UPDATE category_rules SET category = ? WHERE category = ?`).run(newName, cat.name)
       db.prepare(`UPDATE budgets        SET category = ? WHERE category = ?`).run(newName, cat.name)
     }
-    db.prepare(`UPDATE categories SET name = ?, color = ? WHERE id = ?`)
-      .run(newName, color || cat.color, id)
+    const income = is_income === undefined ? cat.is_income : (is_income ? 1 : 0)
+    db.prepare(`UPDATE categories SET name = ?, color = ?, is_income = ? WHERE id = ?`)
+      .run(newName, color || cat.color, income, id)
     db.exec('COMMIT')
   } catch (err) {
     db.exec('ROLLBACK')

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { Download } from 'lucide-react'
 import axios from 'axios'
 import { useCategories } from '../CategoriesContext.jsx'
 import NoteEditor from '../NoteEditor.jsx'
+import ApplyRulePrompt from '../ApplyRulePrompt.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -41,9 +42,14 @@ export default function TransactionsPage() {
   useEffect(() => { load(1); setPage(1) }, [filters])
   useEffect(() => { load() }, [page])
 
+  // After a category change, offer to apply it to all similar transactions.
+  const [rulePrompt, setRulePrompt] = useState(null)   // { id, description, category }
+
   async function changeCategory(id, category) {
+    const row = rows.find(r => r.id === id)
     await axios.put(`/api/transactions/${id}/category`, { category })
     setRows(prev => prev.map(r => r.id === id ? { ...r, category } : r))
+    setRulePrompt({ id, description: row?.description, category })
   }
 
   function updateNote(id, note) {
@@ -164,7 +170,8 @@ export default function TransactionsPage() {
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                  <Fragment key={r.id}>
+                  <tr className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                     <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{r.date}</td>
                     <td className="px-4 py-3 text-white max-w-xs">
                       <div className="truncate">{r.description}</div>
@@ -198,6 +205,19 @@ export default function TransactionsPage() {
                     <td className="px-4 py-3 text-gray-400">{r.owner}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{SOURCE_LABELS[r.source] || r.source}</td>
                   </tr>
+                  {rulePrompt?.id === r.id && (
+                    <tr>
+                      <td colSpan={7} className="px-4 pb-3">
+                        <ApplyRulePrompt
+                          description={rulePrompt.description}
+                          category={rulePrompt.category}
+                          onApplied={() => { setRulePrompt(null); load() }}
+                          onClose={() => setRulePrompt(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

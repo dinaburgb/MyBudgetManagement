@@ -105,6 +105,19 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Apply-rule prompt + income categories (2026-06-13):**
+  - After a category is changed from any transaction list (Transactions table,
+    Overview/Budgets drill-downs), a prompt offers to turn it into an authoritative
+    rule for all similar transactions. Shared `client/src/ApplyRulePrompt.jsx`; the
+    keyword is pre-filled from the description but editable. Posts a rule with
+    `applyMode: 'all'`.
+  - Income categories: new `categories.is_income` flag (migration auto-marks an
+    existing 'הכנסות'). Income categories are kept OUT of the expense pie and get a
+    row in the Overview "תקציב מול ביצוע" table whose "actual" is their income sum
+    (not expenses), tagged "הכנסה". `incomeCategoryNames` in `db/categories.js`;
+    stats `buildBudgetTable` now takes expense + income maps + the income set.
+    Toggle per category on the Categories page (edit mode).
+  - Tests: +1 categories_store (is_income). Full suite: 8 files passing.
 - **Per-account-number inclusion (2026-06-13):**
   - One bank login can expose several account numbers (Discount returns 3). Added
     `excluded_subaccounts (account_id, account_number)` — presence = excluded from
