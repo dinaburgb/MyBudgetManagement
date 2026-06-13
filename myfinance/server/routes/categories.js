@@ -45,7 +45,10 @@ router.post('/', (req, res) => {
 /** PUT /api/categories/:id — rename and/or recolor { name?, color? } */
 router.put('/:id', (req, res) => {
   try {
-    updateCategory(getDb(), req.params.id, { name: req.body.name, color: req.body.color, is_income: req.body.is_income })
+    updateCategory(getDb(), req.params.id, {
+      name: req.body.name, color: req.body.color,
+      is_income: req.body.is_income, is_excluded: req.body.is_excluded,
+    })
     res.json({ message: 'Category updated' })
   } catch (err) {
     if (err.code === 'EXISTS')    return res.status(409).json({ error: 'הקטגוריה כבר קיימת' })
@@ -136,6 +139,7 @@ router.get('/summary', (req, res) => {
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
       AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.category NOT IN (SELECT name FROM categories WHERE is_excluded = 1)
     GROUP BY t.category
     ORDER BY expenses ASC
   `).all()

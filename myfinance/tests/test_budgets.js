@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
-import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths } from '../server/db/budgets.js'
+import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions } from '../server/db/budgets.js'
 import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -131,6 +131,31 @@ test('budgetSummaryForMonths sums the effective limit across months', () => {
   assert.strictEqual(t.get('מזון'), 8000)  // 5000 (June override) + 3000 (July default)
   assert.strictEqual(t.get('רכב'), 800)    // only the July override counts
   assert.ok(!t.has('בידור'))               // never budgeted → absent (empty cell)
+})
+
+test('excluded categories are dropped from the budget overview', () => {
+  const db = freshDb()
+  db.prepare(`UPDATE categories SET is_excluded = 1 WHERE name = 'קניות'`).run()
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'קניות', chargedAmount: -300, description: 'cc repay' }),
+  ] }, db)
+  const rows = computeBudgetOverview(db, '2026-06')
+  assert.ok(!rows.find(r => r.category === 'קניות'), 'excluded category must not appear')
+  assert.ok(rows.find(r => r.category === 'מזון'), 'normal categories still appear')
+})
+
+test('budgetSuggestions averages spend over the last 6 complete months', () => {
+  const db = freshDb()
+  // A charge dated in the previous (complete) month, computed the same way the
+  // function does — so the test is independent of the real calendar date.
+  const d = new Date()
+  const prev = new Date(d.getFullYear(), d.getMonth() - 1, 15)
+  const iso = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-15T00:00:00.000Z`
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'מזון', chargedAmount: -600, description: 'x', date: iso, processedDate: iso }),
+  ] }, db)
+  const { suggestions } = budgetSuggestions(db, 6)
+  assert.strictEqual(suggestions['מזון'], 100)  // 600 / 6 = 100, rounded to nearest 10
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

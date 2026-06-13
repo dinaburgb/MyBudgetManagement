@@ -30,7 +30,7 @@ function barTone(ratio) {
   return 'bg-green-500'
 }
 
-function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
+function BudgetRow({ row, month, onlyThisMonth, suggestion, onSaved }) {
   const { colorFor } = useCategories()
   const [value, setValue] = useState(row.limit ?? '')
   const [saving, setSaving] = useState(false)
@@ -191,6 +191,17 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
           </button>
         )}
       </div>
+
+      {/* Suggestion based on the last 6 months */}
+      {suggestion > 0 && Number(value) !== suggestion && (
+        <button
+          onClick={() => setValue(String(suggestion))}
+          className="mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+          title="ממוצע חודשי על פני 6 החודשים האחרונים"
+        >
+          הצע לפי 6 חודשים: ₪{suggestion.toLocaleString('he-IL')} (לחץ למילוי)
+        </button>
+      )}
     </div>
   )
 }
@@ -200,6 +211,7 @@ export default function BudgetsPage() {
   const [data, setData]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [onlyThisMonth, setOnlyThisMonth] = useState(false)
+  const [suggestions, setSuggestions] = useState({})   // category -> suggested monthly budget
   const options = monthOptions()
 
   async function load() {
@@ -214,6 +226,12 @@ export default function BudgetsPage() {
   }
 
   useEffect(() => { load() }, [month])
+  // Suggested budgets from the last 6 months (independent of the selected month).
+  useEffect(() => {
+    axios.get('/api/budgets/suggestions')
+      .then(res => setSuggestions(res.data.suggestions || {}))
+      .catch(() => setSuggestions({}))
+  }, [])
 
   if (loading) return <div className="text-gray-400">טוען תקציבים...</div>
 
@@ -267,6 +285,7 @@ export default function BudgetsPage() {
             row={row}
             month={month}
             onlyThisMonth={onlyThisMonth}
+            suggestion={suggestions[row.category]}
             onSaved={load}
           />
         ))}

@@ -62,7 +62,7 @@ export function migrateFuelToVehicle(db = getDb()) {
 /** All categories, ordered for display. */
 export function listCategories(db = getDb()) {
   return db.prepare(
-    `SELECT id, name, color, is_system, is_income FROM categories ORDER BY sort_order, id`
+    `SELECT id, name, color, is_system, is_income, is_excluded FROM categories ORDER BY sort_order, id`
   ).all()
 }
 
@@ -74,6 +74,11 @@ export function listCategoryNames(db = getDb()) {
 /** Names of categories flagged as income (kept out of the expense pie). */
 export function incomeCategoryNames(db = getDb()) {
   return db.prepare(`SELECT name FROM categories WHERE is_income = 1`).all().map(r => r.name)
+}
+
+/** Names of categories ignored entirely in totals (e.g. credit-card repayments). */
+export function excludedCategoryNames(db = getDb()) {
+  return db.prepare(`SELECT name FROM categories WHERE is_excluded = 1`).all().map(r => r.name)
 }
 
 /** Add a new category. Throws { code } on bad input or a duplicate name. */
@@ -91,8 +96,8 @@ export function addCategory(db, name, color) {
   return { id: r.lastInsertRowid }
 }
 
-/** Rename, recolor, and/or set the income flag of a category. A rename propagates to all data. */
-export function updateCategory(db, id, { name, color, is_income }) {
+/** Rename, recolor, and/or set the income/excluded flags of a category. A rename propagates to all data. */
+export function updateCategory(db, id, { name, color, is_income, is_excluded }) {
   const cat = db.prepare(`SELECT * FROM categories WHERE id = ?`).get(id)
   if (!cat) throw Object.assign(new Error('not found'), { code: 'NOT_FOUND' })
 
@@ -109,9 +114,10 @@ export function updateCategory(db, id, { name, color, is_income }) {
       db.prepare(`UPDATE category_rules SET category = ? WHERE category = ?`).run(newName, cat.name)
       db.prepare(`UPDATE budgets        SET category = ? WHERE category = ?`).run(newName, cat.name)
     }
-    const income = is_income === undefined ? cat.is_income : (is_income ? 1 : 0)
-    db.prepare(`UPDATE categories SET name = ?, color = ?, is_income = ? WHERE id = ?`)
-      .run(newName, color || cat.color, income, id)
+    const income   = is_income   === undefined ? cat.is_income   : (is_income   ? 1 : 0)
+    const excluded = is_excluded === undefined ? cat.is_excluded : (is_excluded ? 1 : 0)
+    db.prepare(`UPDATE categories SET name = ?, color = ?, is_income = ?, is_excluded = ? WHERE id = ?`)
+      .run(newName, color || cat.color, income, excluded, id)
     db.exec('COMMIT')
   } catch (err) {
     db.exec('ROLLBACK')

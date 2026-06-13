@@ -145,7 +145,16 @@ export default function OverviewPage() {
 
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
   const pie = (data?.byCategory || []).map(c => ({ name: c.category, value: c.expenses }))
+  const pieTotal = pie.reduce((s, p) => s + p.value, 0)
   const hasData = data && (data.totals.expenses > 0 || data.totals.income > 0)
+
+  // Budget-table totals (over expense rows only — income rows aren't expenses).
+  const btExpense = (data?.budgetTable || []).filter(r => r.kind !== 'income')
+  const btTotals = {
+    budget:    btExpense.reduce((s, r) => s + (r.budget || 0), 0),
+    actual:    btExpense.reduce((s, r) => s + r.actual, 0),
+    remaining: btExpense.reduce((s, r) => s + (r.remaining != null ? r.remaining : 0), 0),
+  }
 
   return (
     <div>
@@ -276,6 +285,10 @@ export default function OverviewPage() {
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="flex items-center justify-between border-t border-gray-800 mt-2 pt-3 text-sm">
+                <span className="text-gray-400">סה"כ הוצאות</span>
+                <span className="font-mono text-white">{ils(pieTotal)}</span>
+              </div>
             </div>
           </div>
 
@@ -321,6 +334,16 @@ export default function OverviewPage() {
                     )
                   })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-700 font-medium">
+                    <td className="py-2 text-white">סה"כ הוצאות</td>
+                    <td className="py-2 text-left font-mono text-gray-200">{btTotals.budget ? ils(btTotals.budget) : ''}</td>
+                    <td className="py-2 text-left font-mono text-white">{ils(btTotals.actual)}</td>
+                    <td className={`py-2 text-left font-mono ${btTotals.remaining < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      {btTotals.budget ? (btTotals.remaining < 0 ? `חריגה ${ils(-btTotals.remaining)}` : ils(btTotals.remaining)) : ''}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}

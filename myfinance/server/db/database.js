@@ -52,6 +52,14 @@ function runSchemaMigrations(db) {
     db.exec(`UPDATE categories SET is_income = 1 WHERE name = 'הכנסות'`)
     console.log('Migration: added categories.is_income')
   }
+
+  if (!hasColumn('categories', 'is_excluded')) {
+    db.exec(`ALTER TABLE categories ADD COLUMN is_excluded INTEGER NOT NULL DEFAULT 0`)
+    // A credit-card repayment debit is not a real expense (the card's own charges
+    // are already itemized) — exclude it from all totals by default.
+    db.exec(`UPDATE categories SET is_excluded = 1 WHERE name = 'הורדת כרטיס אשראי'`)
+    console.log('Migration: added categories.is_excluded')
+  }
 }
 
 /** Get the active database connection. Throws if not yet opened. */

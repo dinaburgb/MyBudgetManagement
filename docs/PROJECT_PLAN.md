@@ -105,6 +105,24 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Excluded categories, Overview totals, budget suggestions (2026-06-13):**
+  - `categories.is_excluded` flag (migration auto-marks 'הורדת כרטיס אשראי') —
+    such a category is ignored EVERYWHERE in totals: monthly KPIs, expense pie,
+    budget-vs-actual table, Budgets page, and the Categories summary. Reason: a
+    credit-card repayment debit isn't a real expense (the card's own charges are
+    already itemized). Toggle per category on the Categories page; helper
+    `excludedCategoryNames`.
+  - Overview totals: a "סה"כ הוצאות" line under the expense pie, and a totals
+    footer (תקציב / ביצוע / נותר over expense rows) on the budget table.
+  - Budgets page: per-category suggestion from the last 6 complete months
+    (`GET /api/budgets/suggestions`, `budgetSuggestions` averages spend / 6,
+    rounded to 10, skipping income/excluded categories) — a "הצע לפי 6 חודשים"
+    button fills the input.
+  - Tests: +2 budgets (exclusion + suggestions), +1 categories_store (is_excluded).
+    Full suite: 10 files passing.
+- **Graceful shutdown (2026-06-13):** `POST /api/app/shutdown` clears the key,
+  closes WS + HTTP server + DB and exits(0); a "סגירת התוכנה" button on the
+  dashboard with an end screen. Behind the same-origin guard.
 - **Security hardening + manual entry + prefix search (2026-06-13):**
   - H5 — safe unlock: `unlockOrInit` never re-initialises while encrypted
     credentials exist; a lost sentinel is only recreated if the entered password
