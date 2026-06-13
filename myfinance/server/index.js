@@ -16,7 +16,7 @@ import cors from 'cors'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { openDatabase } from './db/database.js'
+import { openDatabase, closeDatabase } from './db/database.js'
 import { isUnlocked, clearKey, isPasswordSet, unlockOrInit,
          changeMasterPassword, resetMasterPassword } from './crypto/encryption.js'
 import accountsRouter from './routes/accounts.js'
@@ -165,6 +165,25 @@ app.post('/api/auth/reset', (req, res) => {
 app.post('/api/auth/lock', (req, res) => {
   clearKey()
   res.json({ status: 'locked' })
+})
+
+/**
+ * POST /api/app/shutdown — close the app cleanly: clear the key, close the
+ * WebSocket + HTTP server and the database, then exit. Behind the same-origin
+ * guard, so a foreign site can't trigger it.
+ */
+app.post('/api/app/shutdown', (req, res) => {
+  res.json({ status: 'closing' })
+  clearKey()
+  console.log('Shutdown requested — closing cleanly...')
+  // Let the response flush, then tear everything down.
+  setTimeout(() => {
+    try { wss.close() } catch { /* ignore */ }
+    try { closeDatabase() } catch { /* ignore */ }
+    server.close(() => process.exit(0))
+    // Hard fallback if something keeps the event loop alive.
+    setTimeout(() => process.exit(0), 1500).unref?.()
+  }, 150)
 })
 
 // --- API routes ---

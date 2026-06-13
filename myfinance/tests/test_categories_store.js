@@ -9,7 +9,7 @@ import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import {
   seedCategories, listCategoryNames, addCategory, updateCategory, deleteCategory,
-  listCategories, incomeCategoryNames,
+  listCategories, incomeCategoryNames, excludedCategoryNames,
 } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -109,6 +109,16 @@ test('delete with an unknown / empty target falls back to אחר', () => {
   const res = deleteCategory(db, catId(db, 'בידור'), 'קטגוריה שלא קיימת')
   assert.strictEqual(res.dest, 'אחר')
   assert.strictEqual(db.prepare(`SELECT category FROM transactions`).get().category, 'אחר')
+})
+
+test('is_excluded flag is settable, listed, and survives a rename', () => {
+  const db = freshDb()
+  assert.ok(!excludedCategoryNames(db).includes('קניות'))
+  updateCategory(db, catId(db, 'קניות'), { is_excluded: true })
+  assert.strictEqual(listCategories(db).find(c => c.name === 'קניות').is_excluded, 1)
+  assert.ok(excludedCategoryNames(db).includes('קניות'))
+  updateCategory(db, catId(db, 'קניות'), { name: 'רכישות' })
+  assert.ok(excludedCategoryNames(db).includes('רכישות'))
 })
 
 test('system category אחר cannot be deleted', () => {

@@ -10,7 +10,7 @@
  */
 
 import { getDb } from './database.js'
-import { listCategoryNames } from './categories.js'
+import { listCategoryNames, excludedCategoryNames } from './categories.js'
 import { notExcludedSql } from './subaccounts.js'
 
 /** Validate a 'YYYY-MM' string. */
@@ -53,13 +53,15 @@ export function computeBudgetOverview(db = getDb(), month) {
   const spentByCat = new Map(spentRows.map(r => [r.category, r.spent || 0]))
 
   // One row per known category, plus any category that has a budget or spending
-  // but isn't in the canonical list (defensive).
-  const categories = new Set([
+  // but isn't in the canonical list (defensive). Excluded categories (e.g. a
+  // credit-card repayment) never get a budget row.
+  const excluded = new Set(excludedCategoryNames(db))
+  const categories = [...new Set([
     ...listCategoryNames(db),
     ...defaults.keys(), ...overrides.keys(), ...spentByCat.keys(),
-  ])
+  ])].filter(c => !excluded.has(c))
 
-  return [...categories].map(category => {
+  return categories.map(category => {
     const hasOverride = overrides.has(category)
     const limit = hasOverride ? overrides.get(category)
                 : defaults.has(category) ? defaults.get(category)
@@ -123,6 +125,41 @@ export function budgetCategoryTransactions(db, category, month) {
       AND substr(t.date, 1, 7) = ?
     ORDER BY t.date DESC, t.id DESC
   `).all(category, month)
+}
+
+/**
+ * Suggest a monthly budget per category = average monthly spend over the last
+ * `monthsBack` COMPLETE months (excluding the current partial month), from
+ * included accounts/sub-accounts. Income and excluded categories are skipped.
+ * Rounded to the nearest 10 for tidy numbers. Returns { months, suggestions }.
+ */
+export function budgetSuggestions(db = getDb(), monthsBack = 6) {
+  const now = new Date()
+  const months = []
+  for (let i = 1; i <= monthsBack; i++) {
+    const m = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`)
+  }
+  const mP = months.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT t.category AS category,
+           SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END) AS spent
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.include_in_totals = 1
+      AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND substr(t.date, 1, 7) IN (${mP})
+      AND t.category NOT IN (SELECT name FROM categories WHERE is_excluded = 1 OR is_income = 1)
+    GROUP BY t.category
+  `).all(...months)
+
+  const suggestions = {}
+  for (const r of rows) {
+    const avg = (r.spent || 0) / monthsBack
+    if (avg <= 0) continue
+    suggestions[r.category] = Math.round(avg / 10) * 10   // nearest 10
+  }
+  return { months, suggestions }
 }
 
 /**

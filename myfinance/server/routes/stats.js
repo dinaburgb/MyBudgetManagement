@@ -21,7 +21,7 @@ import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { netBalance } from '../db/balances.js'
 import { budgetSummaryForMonths } from '../db/budgets.js'
-import { incomeCategoryNames } from '../db/categories.js'
+import { incomeCategoryNames, excludedCategoryNames } from '../db/categories.js'
 import { notExcludedSql } from '../db/subaccounts.js'
 
 // Sub-account exclusion fragment for the (un-aliased) transactions table.
@@ -69,12 +69,13 @@ function resolveSelection(db, req) {
  * still being kept out of the expense pie. One row per category that has a
  * budget, some spending, or (for income categories) some income.
  */
-function buildBudgetTable(db, months, expenseRows, incomeRows, incomeSet) {
+function buildBudgetTable(db, months, expenseRows, incomeRows, incomeSet, excludedSet = new Set()) {
   const expense = new Map(expenseRows.map(c => [c.category, c.expenses]))
   const income  = new Map(incomeRows.map(c => [c.category, c.income]))
   const budget  = budgetSummaryForMonths(db, months)
-  const cats = new Set([...expense.keys(), ...income.keys(), ...budget.keys()])
-  return [...cats].map(category => {
+  const cats = [...new Set([...expense.keys(), ...income.keys(), ...budget.keys()])]
+    .filter(c => !excludedSet.has(c))   // excluded categories never appear in the table
+  return cats.map(category => {
     const isIncome = incomeSet.has(category)
     const limit  = budget.has(category) ? budget.get(category) : null
     const actual = isIncome ? (income.get(category) || 0) : (expense.get(category) || 0)
@@ -95,17 +96,21 @@ router.get('/overview', (req, res) => {
   // Nothing selected → empty result (avoid an empty IN () which is invalid SQL).
   // Budgets are account-agnostic, so still report them (with zero actuals).
   const incomeSet = new Set(incomeCategoryNames(db))
+  const excludedSet = new Set(excludedCategoryNames(db))
   if (accountIds.length === 0) {
     return res.json({
       months, monthly: months.map(month => ({ month, expenses: 0, income: 0 })),
       byCategory: [], totals: { expenses: 0, income: 0, balance: 0 }, netBalance: 0,
-      budgetTable: buildBudgetTable(db, months, [], [], incomeSet),
+      budgetTable: buildBudgetTable(db, months, [], [], incomeSet, excludedSet),
     })
   }
 
   const mPlaceholders = months.map(() => '?').join(',')
   const aPlaceholders = accountIds.map(() => '?').join(',')
-  const params = [...months, ...accountIds]
+  // Excluded categories (e.g. credit-card repayment) are ignored in every total.
+  const excludedCats = [...excludedSet]
+  const catClause = excludedCats.length ? `AND category NOT IN (${excludedCats.map(() => '?').join(',')})` : ''
+  const params = [...months, ...accountIds, ...excludedCats]
 
   // Monthly income / expense totals
   const monthlyRows = db.prepare(`
@@ -116,6 +121,7 @@ router.get('/overview', (req, res) => {
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
       AND ${NOT_EXCLUDED}
+      ${catClause}
     GROUP BY month
   `).all(...params)
   const byMonth = new Map(monthlyRows.map(r => [r.month, r]))
@@ -133,6 +139,7 @@ router.get('/overview', (req, res) => {
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
       AND ${NOT_EXCLUDED}
+      ${catClause}
     GROUP BY category
     HAVING expenses > 0
     ORDER BY expenses DESC
@@ -168,7 +175,7 @@ router.get('/overview', (req, res) => {
   res.json({
     months, monthly, byCategory, totals,
     netBalance: netBalance(db, accountIds),
-    budgetTable: buildBudgetTable(db, months, expenseByCategory, incomeByCategory, incomeSet),
+    budgetTable: buildBudgetTable(db, months, expenseByCategory, incomeByCategory, incomeSet, excludedSet),
   })
 })
 
