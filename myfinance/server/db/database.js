@@ -60,6 +60,14 @@ export function getDb() {
   return _db
 }
 
+/** Close the database connection cleanly (used on graceful shutdown). */
+export function closeDatabase() {
+  if (_db) {
+    try { _db.close() } catch { /* already closed */ }
+    _db = null
+  }
+}
+
 /**
  * Create a backup of the database file before an import.
  * Keeps the last 7 backups — older ones are deleted automatically.

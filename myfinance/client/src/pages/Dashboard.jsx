@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight } from 'lucide-react'
+import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight, Power } from 'lucide-react'
 import AccountsPage from './AccountsPage.jsx'
 import TransactionsPage from './TransactionsPage.jsx'
 import CategoriesPage from './CategoriesPage.jsx'
@@ -21,10 +21,32 @@ const TABS = [
 
 export default function Dashboard({ onLock }) {
   const [activeTab, setActiveTab] = useState('overview')
+  const [closed, setClosed] = useState(false)
 
   async function handleLock() {
     await axios.post('/api/auth/lock').catch(() => {})
     onLock()
+  }
+
+  async function handleClose() {
+    if (!confirm('לסגור את התוכנה? השרת ייעצר ותצטרך להפעיל אותו מחדש כדי להיכנס.')) return
+    setClosed(true)
+    await axios.post('/api/app/shutdown').catch(() => {})  // server exits; request may not resolve
+  }
+
+  // After shutdown the server is gone — show a friendly end screen.
+  if (closed) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4 text-center">
+        <div>
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-800 rounded-2xl mb-4">
+            <Power className="w-8 h-8 text-gray-400" />
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">התוכנה נסגרה</h1>
+          <p className="text-gray-400 text-sm">אפשר לסגור את הלשונית. כדי להיכנס שוב — הפעל מחדש את השרת.</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -54,13 +76,22 @@ export default function Dashboard({ onLock }) {
             })}
           </nav>
         </div>
-        <button
-          onClick={handleLock}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          נעילה
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleLock}
+            className="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            נעילה
+          </button>
+          <button
+            onClick={handleClose}
+            className="flex items-center gap-2 text-gray-400 hover:text-red-400 text-sm transition-colors"
+          >
+            <Power className="w-4 h-4" />
+            סגירת התוכנה
+          </button>
+        </div>
       </header>
 
       {/* Page content */}
