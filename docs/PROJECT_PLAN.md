@@ -105,6 +105,22 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Per-account-number inclusion (2026-06-13):**
+  - One bank login can expose several account numbers (Discount returns 3). Added
+    `excluded_subaccounts (account_id, account_number)` — presence = excluded from
+    totals; absence = included (default). The login-level `include_in_totals` still
+    applies on top.
+  - `db/subaccounts.js`: `notExcludedSql(idCol, numberCol)` SQL fragment,
+    `listSubAccounts`, `setSubAccountIncluded`, `hasExcludedSubAccounts`. The
+    fragment is now applied in every "totals" query: stats overview (monthly,
+    byCategory, drill), budgets (spent + drill), categories summary, transactions
+    `only_in_totals`, and `netBalance`.
+  - Routes: `GET /api/accounts/:id/subaccounts`, `PUT /api/accounts/:id/subaccounts`
+    ({account_number, include}). Accounts list now returns `subaccount_count` and
+    `excluded_count`.
+  - Accounts page: logins with >1 number show an expandable "פירוט חשבונות" panel
+    with a per-number include checkbox, txn count and balance.
+  - Tests: `tests/test_subaccounts.js` (4). Full suite: 8 files passing.
 - **Edit-category everywhere + Overview budget table (2026-06-13):**
   - New shared `client/src/TxnRow.jsx`: one compact transaction row (date,
     description, inline category select, inline note, amount). Used in the Overview

@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS budgets (
   UNIQUE(category, month)
 );
 
+-- Sub-account exclusions. One bank login (accounts row) can expose several
+-- account numbers (e.g. Discount returns 3). A row here means "exclude this
+-- specific account number from totals", even though its parent login is included.
+-- Absence = included (the default), so this table only lists the exceptions.
+CREATE TABLE IF NOT EXISTS excluded_subaccounts (
+  account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, account_number)
+);
+
 -- Activity log — NO sensitive data, only operational events
 CREATE TABLE IF NOT EXISTS activity_log (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

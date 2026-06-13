@@ -11,6 +11,7 @@
 
 import { getDb } from './database.js'
 import { listCategoryNames } from './categories.js'
+import { notExcludedSql } from './subaccounts.js'
 
 /** Validate a 'YYYY-MM' string. */
 export function isValidMonth(m) {
@@ -45,6 +46,7 @@ export function computeBudgetOverview(db = getDb(), month) {
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
+      AND ${notExcludedSql('t.account_id', 't.account_number')}
       AND substr(t.date, 1, 7) = ?
     GROUP BY t.category
   `).all(month)
@@ -116,6 +118,7 @@ export function budgetCategoryTransactions(db, category, month) {
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
+      AND ${notExcludedSql('t.account_id', 't.account_number')}
       AND t.category = ?
       AND substr(t.date, 1, 7) = ?
     ORDER BY t.date DESC, t.id DESC

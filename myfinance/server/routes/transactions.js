@@ -5,6 +5,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
+import { notExcludedSql } from '../db/subaccounts.js'
 
 const router = Router()
 
@@ -37,6 +38,7 @@ router.get('/', (req, res) => {
   // Only transactions from accounts the user includes in totals
   if (only_in_totals === '1') {
     where.push('account_id IN (SELECT id FROM accounts WHERE include_in_totals = 1)')
+    where.push(notExcludedSql('transactions.account_id', 'transactions.account_number'))
   }
   if (date_from)  { where.push('date >= ?');      params.push(date_from) }
   if (date_to)    { where.push('date <= ?');      params.push(date_to) }

@@ -14,6 +14,7 @@ import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll, AUTHORITATIVE_PRIORITY } from '../db/categorize.js'
 import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
+import { notExcludedSql } from '../db/subaccounts.js'
 
 const router = Router()
 
@@ -134,6 +135,7 @@ router.get('/summary', (req, res) => {
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
+      AND ${notExcludedSql('t.account_id', 't.account_number')}
     GROUP BY t.category
     ORDER BY expenses ASC
   `).all()

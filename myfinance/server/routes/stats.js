@@ -21,6 +21,10 @@ import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { netBalance } from '../db/balances.js'
 import { budgetSummaryForMonths } from '../db/budgets.js'
+import { notExcludedSql } from '../db/subaccounts.js'
+
+// Sub-account exclusion fragment for the (un-aliased) transactions table.
+const NOT_EXCLUDED = notExcludedSql('transactions.account_id', 'transactions.account_number')
 
 const router = Router()
 
@@ -104,6 +108,7 @@ router.get('/overview', (req, res) => {
     FROM transactions
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
+      AND ${NOT_EXCLUDED}
     GROUP BY month
   `).all(...params)
   const byMonth = new Map(monthlyRows.map(r => [r.month, r]))
@@ -120,6 +125,7 @@ router.get('/overview', (req, res) => {
     FROM transactions
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
+      AND ${NOT_EXCLUDED}
     GROUP BY category
     HAVING expenses > 0
     ORDER BY expenses DESC
@@ -160,6 +166,7 @@ router.get('/transactions', (req, res) => {
     WHERE category = ?
       AND substr(date, 1, 7) IN (${mP})
       AND account_id IN (${aP})
+      AND ${NOT_EXCLUDED}
     ORDER BY date DESC, id DESC
   `).all(category, ...months, ...accountIds)
   res.json({ category, rows })

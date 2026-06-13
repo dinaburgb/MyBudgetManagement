@@ -8,6 +8,7 @@ import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
 import { balancesByAccount } from '../db/balances.js'
 import { deleteAccount } from '../db/accounts.js'
+import { listSubAccounts, setSubAccountIncluded } from '../db/subaccounts.js'
 
 const router = Router()
 
@@ -24,7 +25,10 @@ router.get('/', (req, res) => {
   const db = getDb()
   const accounts = db.prepare(`
     SELECT id, name, source, owner, last_scraped, enabled, include_in_totals, created_at,
-           (SELECT COUNT(*) FROM transactions t WHERE t.account_id = accounts.id) AS txn_count
+           (SELECT COUNT(*) FROM transactions t WHERE t.account_id = accounts.id) AS txn_count,
+           (SELECT COUNT(DISTINCT t.account_number) FROM transactions t
+              WHERE t.account_id = accounts.id AND t.account_number IS NOT NULL) AS subaccount_count,
+           (SELECT COUNT(*) FROM excluded_subaccounts e WHERE e.account_id = accounts.id) AS excluded_count
     FROM accounts ORDER BY source, owner
   `).all()
   // Attach the latest known balance per account (null when unknown, e.g. cards).
@@ -35,6 +39,19 @@ router.get('/', (req, res) => {
     a.balance_date = b ? b.balance_date : null
   }
   res.json(accounts)
+})
+
+/** GET /api/accounts/:id/subaccounts — the account numbers under one login */
+router.get('/:id/subaccounts', (req, res) => {
+  res.json(listSubAccounts(getDb(), Number(req.params.id)))
+})
+
+/** PUT /api/accounts/:id/subaccounts — include/exclude one number { account_number, include } */
+router.put('/:id/subaccounts', (req, res) => {
+  const { account_number, include } = req.body
+  if (!account_number) return res.status(400).json({ error: 'account_number is required' })
+  setSubAccountIncluded(getDb(), Number(req.params.id), String(account_number), !!include)
+  res.json({ message: 'Sub-account updated' })
 })
 
 /** POST /api/accounts — add a new account with encrypted credentials */

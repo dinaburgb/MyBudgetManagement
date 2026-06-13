@@ -4,6 +4,7 @@
  */
 
 import { getDb } from './database.js'
+import { notExcludedSql } from './subaccounts.js'
 
 /** Insert or update the balance for one account number. */
 export function upsertBalance(db, accountId, accountNumber, balance, dateISO) {
@@ -41,11 +42,14 @@ export function balancesByAccount(db = getDb()) {
  * (or all accounts when ids is null/empty).
  */
 export function netBalance(db, accountIds = null) {
+  // Individually-excluded account numbers don't count toward the net balance.
+  const notExcluded = notExcludedSql('account_balances.account_id', 'account_balances.account_number')
   if (accountIds && accountIds.length) {
     const placeholders = accountIds.map(() => '?').join(',')
     return db.prepare(
-      `SELECT SUM(balance) AS net FROM account_balances WHERE account_id IN (${placeholders})`
+      `SELECT SUM(balance) AS net FROM account_balances
+       WHERE account_id IN (${placeholders}) AND ${notExcluded}`
     ).get(...accountIds).net || 0
   }
-  return db.prepare(`SELECT SUM(balance) AS net FROM account_balances`).get().net || 0
+  return db.prepare(`SELECT SUM(balance) AS net FROM account_balances WHERE ${notExcluded}`).get().net || 0
 }
