@@ -87,6 +87,24 @@ Status of each bank / card integration:
   `PUT /api/transactions/:id/note`; also included in the CSV export. Category
   rename was already available on the Categories page (pencil icon), and it
   propagates to transactions, rules and budgets.
+- **Authoritative rules + budget drill-down (2026-06-13):**
+  - Categorization precedence fixed: a keyword rule with priority >=
+    `AUTHORITATIVE_PRIORITY` (100) now overrides even the scraper's own category,
+    on import and on re-apply. Normal rules still only fill in when the scraper
+    gave nothing. New helpers in `categorize.js`: `matchRule`, `ensureEssentialRules`
+    (idempotent: seeds/upgrades the curated `ESSENTIAL_RULES` to authoritative and
+    applies each once), wired into startup in `index.js`. `save-transactions.js`
+    uses `pickCategory`. The UI "apply to already-categorized" checkbox now also
+    makes the rule authoritative so it sticks for future imports.
+  - Curated essential rules grounded in the real data: רב קו → ילדים; and
+    דלק/מוסך/פנגו/סלופארק/משרד התחבורה/רשיונות/רישוי/קנס → רכב. First run moved
+    25 existing transactions.
+  - Budgets page: clicking a category's spent figure expands its transactions for
+    that month inline (`GET /api/budgets/transactions`, `budgetCategoryTransactions`
+    in `db/budgets.js`), with the same inline note editor.
+  - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
+  - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
+    target category isn't decided, so it's deferred.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

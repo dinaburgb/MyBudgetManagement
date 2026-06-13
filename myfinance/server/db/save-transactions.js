@@ -12,7 +12,7 @@
 
 import crypto from 'node:crypto'
 import { getDb } from './database.js'
-import { loadRules, categorizeDescription, normalizeCategory, OTHER_CATEGORY } from './categorize.js'
+import { loadRules, matchRule, normalizeCategory, OTHER_CATEGORY, AUTHORITATIVE_PRIORITY } from './categorize.js'
 
 /**
  * Normalize a description for hashing:
@@ -48,6 +48,17 @@ export function computeContentHash(source, accountNumber, dateYMD, amount, descr
     currency || 'ILS',
   ].join('|')
   return crypto.createHash('sha256').update(parts).digest('hex')
+}
+
+/**
+ * Decide a transaction's category given its scraped data and the best-matching
+ * rule (or null). Authoritative rules override the scraper; otherwise the scraper
+ * wins, then a normal rule, then the catch-all. See precedence note at call site.
+ */
+function pickCategory(txn, matched) {
+  if (matched && matched.priority >= AUTHORITATIVE_PRIORITY) return matched.category
+  const scraperCat = txn.category ? normalizeCategory(txn.category) : null
+  return scraperCat || (matched ? matched.category : null) || OTHER_CATEGORY
 }
 
 /**
@@ -135,11 +146,13 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
         charged_currency: txn.chargedCurrency || 'ILS',
         description: txn.description || '',
         memo: txn.memo || '',
-        // Prefer the scraper's own category (normalized to our Hebrew set), then
-        // our keyword rules, then the catch-all.
-        category: (txn.category ? normalizeCategory(txn.category) : null)
-          || categorizeDescription(txn.description, rules)
-          || OTHER_CATEGORY,
+        // Category precedence:
+        //   1. an authoritative rule (priority >= AUTHORITATIVE_PRIORITY) wins
+        //      over everything, including the scraper's own category;
+        //   2. otherwise the scraper's category (normalized to our Hebrew set);
+        //   3. otherwise a normal keyword rule;
+        //   4. otherwise the catch-all.
+        category: pickCategory(txn, matchRule(txn.description, rules)),
         owner: account.owner,
         account_id: account.id,
         account_number: accountNumber,

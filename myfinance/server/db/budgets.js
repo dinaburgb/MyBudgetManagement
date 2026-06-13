@@ -74,6 +74,24 @@ export function computeBudgetOverview(db = getDb(), month) {
 }
 
 /**
+ * The transactions behind a budget row: a category's charges for the given month,
+ * from accounts included in totals (the same set "spent" is computed from),
+ * newest first. Used by the Budgets page drill-down.
+ */
+export function budgetCategoryTransactions(db, category, month) {
+  return db.prepare(`
+    SELECT t.id, t.date, t.description, t.amount, t.account_name, t.source,
+           t.type, t.installment_number, t.installment_total, t.note
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.include_in_totals = 1
+      AND t.category = ?
+      AND substr(t.date, 1, 7) = ?
+    ORDER BY t.date DESC, t.id DESC
+  `).all(category, month)
+}
+
+/**
  * Insert or update a budget limit for a category.
  * month '' sets the recurring default; a 'YYYY-MM' sets a one-month override.
  */

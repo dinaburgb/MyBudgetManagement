@@ -12,7 +12,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll } from '../db/categorize.js'
+import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll, AUTHORITATIVE_PRIORITY } from '../db/categorize.js'
 import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
 
 const router = Router()
@@ -83,9 +83,14 @@ router.post('/rules', (req, res) => {
   }
   const db = getDb()
   const kw = keyword.trim(), cat = category.trim()
+  // 'all' mode makes the rule authoritative (high priority) so it also wins over
+  // the scraper's own category on future imports — not just a one-time fix.
+  const prio = req.body.applyMode === 'all'
+    ? Math.max(Number(priority) || 0, AUTHORITATIVE_PRIORITY)
+    : Number(priority) || 0
   const result = db.prepare(
     `INSERT INTO category_rules (keyword, category, priority) VALUES (?, ?, ?)`
-  ).run(kw, cat, Number(priority) || 0)
+  ).run(kw, cat, prio)
   // Apply the new rule to existing transactions right away. Default touches only
   // uncategorized rows; 'all' overrides already-categorized matches too (used to
   // pull charges into a category like רכב from wherever they currently sit).

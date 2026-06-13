@@ -24,7 +24,7 @@ import scrapeRouter from './routes/scrape.js'
 import categoriesRouter from './routes/categories.js'
 import budgetsRouter from './routes/budgets.js'
 import statsRouter from './routes/stats.js'
-import { seedDefaultRules, migrateCategoriesToHebrew } from './db/categorize.js'
+import { seedDefaultRules, migrateCategoriesToHebrew, ensureEssentialRules } from './db/categorize.js'
 import { seedCategories, migrateFuelToVehicle } from './db/categories.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -42,6 +42,10 @@ seedDefaultRules()
 // set (idempotent — does nothing once everything is already canonical).
 const migratedCats = migrateCategoriesToHebrew()
 if (migratedCats > 0) console.log(`Migration: normalized ${migratedCats} category value(s) to Hebrew`)
+// Ensure authoritative keyword rules (רב קו→ילדים, דלק/מוסך→רכב, ...) exist and
+// apply them once to existing data. Idempotent — added rules won't fight later edits.
+const ess = ensureEssentialRules()
+if (ess.added > 0) console.log(`Essential rules: added ${ess.added}, re-categorized ${ess.applied} transaction(s)`)
 
 const app    = express()
 const server = createServer(app)
