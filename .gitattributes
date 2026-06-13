@@ -1,0 +1,9 @@
+# Normalize line endings so Windows/Linux/macOS produce stable diffs.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Treat these as binary (never normalize)
+*.db binary
+*.bin binary
+*.enc binary
+*.png binary

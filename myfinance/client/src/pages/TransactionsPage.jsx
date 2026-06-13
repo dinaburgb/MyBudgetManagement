@@ -1,10 +1,11 @@
 import { useState, useEffect, Fragment } from 'react'
-import { Download } from 'lucide-react'
+import { Download, Plus } from 'lucide-react'
 import axios from 'axios'
 import { useCategories } from '../CategoriesContext.jsx'
 import NoteEditor from '../NoteEditor.jsx'
 import ApplyRulePrompt from '../ApplyRulePrompt.jsx'
 import MultiSelect from '../MultiSelect.jsx'
+import ManualTxnForm from '../ManualTxnForm.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -18,6 +19,7 @@ export default function TransactionsPage() {
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(true)
   const [accounts, setAccounts] = useState([])
+  const [showAdd, setShowAdd] = useState(false)
   const EMPTY_FILTERS = { search: '', owners: [], categories: [], account_ids: [], only_in_totals: '', date_from: '', date_to: '' }
   const [filters, setFilters] = useState(EMPTY_FILTERS)
 
@@ -80,20 +82,39 @@ export default function TransactionsPage() {
         <h2 className="text-xl font-bold text-white">
           תנועות <span className="text-gray-500 text-base font-normal">({total})</span>
         </h2>
-        <a
-          href="/api/transactions/export/csv"
-          className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          ייצוא CSV
-        </a>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAdd(v => !v)}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            הוספה ידנית
+          </button>
+          <a
+            href="/api/transactions/export/csv"
+            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            ייצוא CSV
+          </a>
+        </div>
       </div>
+
+      {showAdd && (
+        <ManualTxnForm
+          accounts={accounts}
+          categories={CATEGORIES}
+          owners={owners}
+          onAdded={() => { setShowAdd(false); load(1); setPage(1) }}
+          onClose={() => setShowAdd(false)}
+        />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
         <input
           type="text"
-          placeholder="חיפוש לפי תיאור..."
+          placeholder="חיפוש לפי תחילת התיאור..."
           value={filters.search}
           onChange={e => setFilter('search', e.target.value)}
           className="bg-gray-900 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 w-52"

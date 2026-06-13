@@ -17,8 +17,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { openDatabase } from './db/database.js'
-import { deriveKey, isUnlocked, verifyPassword, savePasswordSentinel, clearKey,
-         isPasswordSet, changeMasterPassword, resetMasterPassword } from './crypto/encryption.js'
+import { isUnlocked, clearKey, isPasswordSet, unlockOrInit,
+         changeMasterPassword, resetMasterPassword } from './crypto/encryption.js'
 import accountsRouter from './routes/accounts.js'
 import transactionsRouter from './routes/transactions.js'
 import scrapeRouter from './routes/scrape.js'
@@ -50,19 +50,27 @@ if (ess.added > 0) console.log(`Essential rules: added ${ess.added}, re-categori
 
 const app    = express()
 const server = createServer(app)
-const wss    = new WebSocketServer({ server })  // WebSocket for OTP popups
 
-// CORS — locked down. The React app is served from this same origin (and in dev
-// Vite proxies /api to here), so browser requests are same-origin and need no
-// CORS at all. We allow ONLY localhost origins so that an arbitrary website you
-// happen to have open cannot read your financial data from localhost:3000 while
-// the app is unlocked. Any other origin is rejected.
+// Allowed browser origins. The React app is served from this same origin (and in
+// dev Vite proxies /api to here), so legit requests are same-origin. We allow
+// ONLY localhost so a random site you have open can't reach localhost:3000.
 const ALLOWED_ORIGINS = new Set([
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',  // Vite dev server
   'http://127.0.0.1:5173',
 ])
+
+// WebSocket for OTP popups — reject connections from unknown origins (H4).
+const wss = new WebSocketServer({
+  server,
+  verifyClient: ({ origin }, cb) => {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return cb(true)
+    cb(false, 403, 'Forbidden origin')
+  },
+})
+
+// CORS — mainly stops other origins from READING responses.
 app.use(cors({
   origin(origin, callback) {
     // No Origin header (same-origin requests, curl, server-to-server) → allow.
@@ -73,6 +81,24 @@ app.use(cors({
   },
 }))
 app.use(express.json())
+
+// State-changing requests must be same-origin (H3). CORS alone doesn't stop a
+// foreign site from *sending* a POST/PUT/DELETE to localhost; this does. Browsers
+// send Sec-Fetch-Site and Origin; non-browser callers (curl, tests) send neither
+// and are allowed (local trust). This is a lightweight CSRF guard — no tokens.
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+app.use((req, res, next) => {
+  if (!MUTATING.has(req.method)) return next()
+  const site = req.get('sec-fetch-site')
+  if (site && site !== 'same-origin' && site !== 'none') {
+    return res.status(403).json({ error: 'Cross-site request blocked' })
+  }
+  const origin = req.get('origin')
+  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    return res.status(403).json({ error: 'Cross-origin request blocked' })
+  }
+  next()
+})
 
 // Serve compiled React app
 app.use(express.static(CLIENT_DIST))
@@ -89,21 +115,12 @@ app.post('/api/auth/unlock', (req, res) => {
   const { password } = req.body
   if (!password) return res.status(400).json({ error: 'Password is required' })
 
-  const result = verifyPassword(password)
-
-  if (result === null) {
-    // First run — no sentinel exists yet. Set up the password.
-    deriveKey(password)
-    savePasswordSentinel()
-    return res.json({ status: 'first_run', message: 'Master password set. Keep it safe — it cannot be recovered.' })
-  }
-
-  if (result === false) {
-    return res.status(401).json({ error: 'Wrong password' })
-  }
-
-  // result === true — password correct, key already derived inside verifyPassword
-  res.json({ status: 'unlocked' })
+  // unlockOrInit safely handles a missing sentinel: it only re-initialises when
+  // there are no stored credentials, or recreates the sentinel when the password
+  // actually decrypts existing credentials. Otherwise it's a wrong password.
+  const status = unlockOrInit(password)
+  if (status === false) return res.status(401).json({ error: 'Wrong password' })
+  res.json({ status })
 })
 
 /** GET /api/auth/status — is the app unlocked, and has a password been set? */

@@ -18,9 +18,11 @@ router.use((req, res, next) => {
   next()
 })
 
-/** Current month as 'YYYY-MM'. */
+/** Current month as 'YYYY-MM', in LOCAL time (toISOString would use UTC and flip
+ *  the month near local midnight). */
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 /** GET /api/budgets/overview — all categories with limit/spent/remaining for a month */
@@ -41,8 +43,9 @@ router.get('/transactions', (req, res) => {
 /** PUT /api/budgets — set or update a limit */
 router.put('/', (req, res) => {
   const { category, amount, month = '' } = req.body
-  if (!category || amount == null || isNaN(Number(amount))) {
-    return res.status(400).json({ error: 'category and a numeric amount are required' })
+  const amt = Number(amount)
+  if (!category || amount == null || !Number.isFinite(amt) || amt < 0) {
+    return res.status(400).json({ error: 'category and a non-negative numeric amount are required' })
   }
   if (month !== '' && !isValidMonth(month)) {
     return res.status(400).json({ error: 'month must be empty or YYYY-MM' })

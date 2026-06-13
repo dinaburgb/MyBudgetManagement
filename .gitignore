@@ -26,3 +26,6 @@ tokens*
 
 # Personal prompt doc — kept locally but not tracked (contains personal profile)
 docs/INSTRUCTIONS.md
+
+# External review brief — kept locally, not tracked
+MyBudgetManagement_GPT_Suggestions_ForClaude.md

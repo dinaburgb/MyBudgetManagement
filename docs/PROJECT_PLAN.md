@@ -105,6 +105,26 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Security hardening + manual entry + prefix search (2026-06-13):**
+  - H5 — safe unlock: `unlockOrInit` never re-initialises while encrypted
+    credentials exist; a lost sentinel is only recreated if the entered password
+    actually decrypts a stored credential, else it's a wrong password (no metadata
+    touched). Crypto data dir is overridable via `MYFINANCE_CRYPTO_DIR` for tests.
+  - H3/H4 — a lightweight same-origin guard rejects cross-site `POST/PUT/PATCH/DELETE`
+    (Origin + Sec-Fetch-Site), and the WebSocket rejects unknown origins. No tokens.
+  - M4 — CSV export neutralises formula injection (`server/util/csv.js`, `csvSafeText`).
+  - M7 — budgets `currentMonth()` uses local time, not UTC.
+  - M6 — input validation: transactions pagination capped (limit 1..500, page>=1);
+    budget amount must be finite and non-negative.
+  - Manual entry: `POST /api/transactions` + `insertManualTransaction` (source
+    'manual', random dedup key) for cash etc.; `ManualTxnForm.jsx` on the
+    Transactions page (date/desc/amount/expense-income/category/owner/account).
+  - Transactions search is now a prefix match (`description LIKE 'term%'`, wildcards
+    escaped).
+  - `.gitattributes` (eol=lf) to stop CRLF-only diffs; README privacy model +
+    `git archive` safe-export; untracked the external review brief.
+  - Tests: `test_auth.js` (3, H5), `test_csv.js` (5), +3 manual-entry in
+    test_save_transactions. Full suite: 10 files passing.
 - **Multi-filters, master-password change/reset, disclaimer (2026-06-13):**
   - Transactions filters for owner / category / account are now multi-select
     (`client/src/MultiSelect.jsx`); the owners list is derived from the accounts

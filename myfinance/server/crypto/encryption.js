@@ -17,7 +17,12 @@ import { fileURLToPath } from 'node:url'
 import { getDb } from '../db/database.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const SALT_FILE = path.join(__dirname, '..', '..', 'data', 'salt.bin')
+// Data dir is overridable via env so tests can point at a temp dir instead of the
+// real data/ folder (which holds the user's actual salt + sentinel).
+const DATA_DIR = process.env.MYFINANCE_CRYPTO_DIR || path.join(__dirname, '..', '..', 'data')
+const SALT_FILE = path.join(DATA_DIR, 'salt.bin')
+const SENTINEL_FILE = path.join(DATA_DIR, 'sentinel.enc')
+const SENTINEL_VALUE = 'myfinance-ok'
 
 const PBKDF2_ITERATIONS = 100_000
 const PBKDF2_DIGEST = 'sha512'
@@ -95,9 +100,6 @@ export function decrypt(ciphertext) {
  * We store a small encrypted sentinel string and try to decrypt it.
  * Returns true if decryption succeeds (password is correct).
  */
-const SENTINEL_FILE = path.join(__dirname, '..', '..', 'data', 'sentinel.enc')
-const SENTINEL_VALUE = 'myfinance-ok'
-
 export function savePasswordSentinel() {
   fs.writeFileSync(SENTINEL_FILE, encrypt(SENTINEL_VALUE))
 }
@@ -118,6 +120,41 @@ export function verifyPassword(masterPassword) {
 /** True once a master password has been set (the sentinel exists). */
 export function isPasswordSet() {
   return fs.existsSync(SENTINEL_FILE)
+}
+
+/**
+ * Unlock the app, safely handling a missing sentinel (H5). Returns one of:
+ *   'unlocked'  — sentinel present and the password matched
+ *   'first_run' — no sentinel AND no stored credentials → genuine first setup
+ *   'recovered' — no sentinel BUT stored credentials decrypt with this password
+ *                 (the sentinel was lost) → it is safely recreated
+ *   false       — wrong password (no encryption metadata is modified)
+ *
+ * The dangerous old behaviour — "no sentinel ⇒ treat any password as first run
+ * and overwrite the sentinel" — would have orphaned existing encrypted
+ * credentials. Here we never create a fresh sentinel while credentials exist
+ * unless the entered password actually decrypts them.
+ */
+export function unlockOrInit(password, db = getDb()) {
+  if (isPasswordSet()) {
+    return verifyPassword(password) ? 'unlocked' : false
+  }
+  const row = db.prepare(`SELECT credentials FROM accounts WHERE credentials != '' LIMIT 1`).get()
+  if (!row) {
+    deriveKey(password)
+    savePasswordSentinel()
+    return 'first_run'
+  }
+  // Sentinel missing but credentials exist — verify by decrypting a real one.
+  deriveKey(password)
+  try {
+    JSON.parse(decrypt(row.credentials))   // throws if the key (password) is wrong
+    savePasswordSentinel()                 // re-create the lost sentinel
+    return 'recovered'
+  } catch {
+    clearKey()
+    return false
+  }
 }
 
 /**

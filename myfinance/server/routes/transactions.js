@@ -6,6 +6,8 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { notExcludedSql } from '../db/subaccounts.js'
+import { insertManualTransaction } from '../db/save-transactions.js'
+import { csvSafeText } from '../util/csv.js'
 
 const router = Router()
 
@@ -53,10 +55,19 @@ router.get('/', (req, res) => {
   if (date_to)    { where.push('date <= ?');      params.push(date_to) }
   if (amount_min) { where.push('amount >= ?');    params.push(Number(amount_min)) }
   if (amount_max) { where.push('amount <= ?');    params.push(Number(amount_max)) }
-  if (search)     { where.push('description LIKE ?'); params.push(`%${search}%`) }
+  // Search matches the START of the description (prefix). Escape LIKE wildcards in
+  // the user's input so % and _ are treated literally.
+  if (search) {
+    const safe = String(search).replace(/[\\%_]/g, ch => '\\' + ch)
+    where.push("description LIKE ? ESCAPE '\\'")
+    params.push(`${safe}%`)
+  }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
-  const offset = (Number(page) - 1) * Number(limit)
+  // Validate pagination: page >= 1, limit 1..500 (cap protects memory/perf).
+  const limitN = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500)
+  const pageN  = Math.max(parseInt(page, 10) || 1, 1)
+  const offset = (pageN - 1) * limitN
 
   const db = getDb()
 
@@ -73,9 +84,40 @@ router.get('/', (req, res) => {
     ${whereClause}
     ORDER BY date DESC, id DESC
     LIMIT ? OFFSET ?
-  `).all(...params, Number(limit), offset)
+  `).all(...params, limitN, offset)
 
-  res.json({ total, page: Number(page), limit: Number(limit), rows })
+  res.json({ total, page: pageN, limit: limitN, rows })
+})
+
+/**
+ * POST /api/transactions — add a transaction by hand (e.g. a cash payment).
+ * Body: { date 'YYYY-MM-DD', description, amount (signed: -expense/+income),
+ *         category?, owner?, account_id? }.
+ */
+router.post('/', (req, res) => {
+  const { date, description, amount, category, owner, account_id } = req.body || {}
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
+  }
+  if (!description || !String(description).trim()) {
+    return res.status(400).json({ error: 'description is required' })
+  }
+  const amt = Number(amount)
+  if (!Number.isFinite(amt) || amt === 0) {
+    return res.status(400).json({ error: 'amount must be a non-zero number' })
+  }
+  const db = getDb()
+  let account_name = null
+  if (account_id) {
+    const a = db.prepare(`SELECT name FROM accounts WHERE id = ?`).get(Number(account_id))
+    if (!a) return res.status(400).json({ error: 'account not found' })
+    account_name = a.name
+  }
+  const id = insertManualTransaction(db, {
+    date, description: String(description).trim(), amount: amt,
+    category, owner, account_id: account_id ? Number(account_id) : null, account_name,
+  })
+  res.json({ id, message: 'Transaction added' })
 })
 
 /** PUT /api/transactions/:id/category — manually set a category */
@@ -110,10 +152,10 @@ router.get('/export/csv', (req, res) => {
 
   const header = 'date,description,amount,currency,category,owner,source,account,card,status,note\n'
   const csv = rows.map(r =>
-    [r.date, `"${(r.description || '').replace(/"/g, '""')}"`,
-     r.amount, r.original_currency, r.category, r.owner,
-     r.source, r.account_name, r.card_last4, r.status,
-     `"${(r.note || '').replace(/"/g, '""')}"`].join(',')
+    [r.date, csvSafeText(r.description),
+     r.amount, r.original_currency, csvSafeText(r.category), csvSafeText(r.owner),
+     csvSafeText(r.source), csvSafeText(r.account_name), csvSafeText(r.card_last4), r.status,
+     csvSafeText(r.note)].join(',')
   ).join('\n')
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')

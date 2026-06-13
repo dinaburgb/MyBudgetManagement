@@ -192,3 +192,56 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
 
   return { inserted, updated, skipped }
 }
+
+/**
+ * Insert a single transaction entered by hand (e.g. a cash payment). Not from a
+ * scraper, so it gets a random dedup key (never collides) and source 'manual'.
+ * `amount` is signed: negative = expense, positive = income. Returns the new id.
+ */
+export function insertManualTransaction(db, input) {
+  const { date, description, amount, category, owner, account_id, account_name } = input
+  const ymd = String(date).slice(0, 10)
+  const row = {
+    external_id: null,
+    dedup_key: 'manual:' + crypto.randomUUID(),
+    raw_payload_json: JSON.stringify({ manual: true, date: ymd, description, amount }),
+    date: ymd,
+    processed_date: ymd,
+    amount: Number(amount),
+    original_amount: Number(amount),
+    original_currency: 'ILS',
+    charged_amount: Number(amount),
+    charged_currency: 'ILS',
+    description: description || '',
+    memo: '',
+    category: category ? normalizeCategory(category) : OTHER_CATEGORY,
+    owner: owner || 'Boris',
+    account_id: account_id || null,
+    account_number: null,
+    account_name: account_name || (account_id ? null : 'מזומן'),
+    source: 'manual',
+    card_last4: null,
+    type: 'normal',
+    installment_number: null,
+    installment_total: null,
+    status: 'completed',
+  }
+  const stmt = db.prepare(`
+    INSERT INTO transactions (
+      external_id, dedup_key, raw_payload_json,
+      date, processed_date, amount,
+      original_amount, original_currency, charged_amount, charged_currency,
+      description, memo, category, owner,
+      account_id, account_number, account_name, source, card_last4,
+      type, installment_number, installment_total, status
+    ) VALUES (
+      @external_id, @dedup_key, @raw_payload_json,
+      @date, @processed_date, @amount,
+      @original_amount, @original_currency, @charged_amount, @charged_currency,
+      @description, @memo, @category, @owner,
+      @account_id, @account_number, @account_name, @source, @card_last4,
+      @type, @installment_number, @installment_total, @status
+    )
+  `)
+  return stmt.run(row).lastInsertRowid
+}
