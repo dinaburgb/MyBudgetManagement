@@ -53,11 +53,12 @@ router.put('/:id', (req, res) => {
   }
 })
 
-/** DELETE /api/categories/:id — delete and move its data to 'אחר' */
+/** DELETE /api/categories/:id?target=NAME — delete, moving its data to target (default 'אחר') */
 router.delete('/:id', (req, res) => {
   try {
-    deleteCategory(getDb(), req.params.id)
-    res.json({ message: 'Category deleted' })
+    const target = req.query.target || req.body?.target
+    const { dest } = deleteCategory(getDb(), req.params.id, target)
+    res.json({ message: 'Category deleted', movedTo: dest })
   } catch (err) {
     if (err.code === 'SYSTEM')    return res.status(400).json({ error: 'לא ניתן למחוק קטגוריית מערכת' })
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: 'Category not found' })

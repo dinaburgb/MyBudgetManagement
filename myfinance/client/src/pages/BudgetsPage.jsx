@@ -3,7 +3,7 @@ import { ChevronDown, ChevronLeft } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
-import NoteEditor from '../NoteEditor.jsx'
+import TxnRow from '../TxnRow.jsx'
 
 // Build a list of month options: 12 months back through 1 month ahead.
 const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -44,23 +44,27 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
   // Collapse and drop cached transactions whenever the month changes.
   useEffect(() => { setOpen(false); setTxns(null) }, [month])
 
+  async function loadTxns() {
+    setTxLoading(true)
+    try {
+      const res = await axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
+      setTxns(res.data.rows)
+    } catch {
+      setTxns([])
+    } finally {
+      setTxLoading(false)
+    }
+  }
   async function toggleDrill() {
     const next = !open
     setOpen(next)
-    if (next && txns === null) {
-      setTxLoading(true)
-      try {
-        const res = await axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
-        setTxns(res.data.rows)
-      } catch {
-        setTxns([])
-      } finally {
-        setTxLoading(false)
-      }
-    }
+    if (next && txns === null) await loadTxns()
   }
-  function updateTxNote(id, note) {
-    setTxns(prev => prev && prev.map(t => t.id === id ? { ...t, note } : t))
+  // A category change moves a charge out of this bucket: refresh the list and the
+  // whole month's totals.
+  function onTxnChanged() {
+    loadTxns()
+    onSaved()
   }
 
   const limit = row.limit
@@ -148,24 +152,7 @@ function BudgetRow({ row, month, onlyThisMonth, onSaved }) {
               <table className="w-full text-sm">
                 <tbody>
                   {txns.map(t => (
-                    <tr key={t.id} className="border-b border-gray-800/50">
-                      <td className="py-2 pl-3 text-gray-400 whitespace-nowrap align-top">{t.date}</td>
-                      <td className="py-2 text-white">
-                        <div>{t.description}</div>
-                        {t.type === 'installment' && t.installment_total > 1 && (
-                          <span className="text-xs text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
-                            תשלום {t.installment_number} מתוך {t.installment_total}
-                          </span>
-                        )}
-                        <span className="text-gray-600 text-xs"> · {t.account_name}</span>
-                        <div className="mt-1">
-                          <NoteEditor id={t.id} note={t.note} onSaved={n => updateTxNote(t.id, n)} />
-                        </div>
-                      </td>
-                      <td className={`py-2 text-left font-mono whitespace-nowrap align-top ${t.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                        {t.amount < 0 ? '-' : '+'}{ils(Math.abs(t.amount))}
-                      </td>
-                    </tr>
+                    <TxnRow key={t.id} txn={t} onChanged={onTxnChanged} />
                   ))}
                 </tbody>
               </table>

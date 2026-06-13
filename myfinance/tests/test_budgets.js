@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
-import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth } from '../server/db/budgets.js'
+import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths } from '../server/db/budgets.js'
 import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -120,6 +120,17 @@ test('category with no budget reports null limit and remaining', () => {
   const food = find(rows, 'מזון')
   assert.strictEqual(food.limit, null)
   assert.strictEqual(food.remaining, null)
+})
+
+test('budgetSummaryForMonths sums the effective limit across months', () => {
+  const db = freshDb()
+  setBudget(db, 'מזון', 3000)             // recurring default
+  setBudget(db, 'מזון', 5000, '2026-06')  // June override
+  setBudget(db, 'רכב', 800, '2026-07')    // only July, no default
+  const t = budgetSummaryForMonths(db, ['2026-06', '2026-07'])
+  assert.strictEqual(t.get('מזון'), 8000)  // 5000 (June override) + 3000 (July default)
+  assert.strictEqual(t.get('רכב'), 800)    // only the July override counts
+  assert.ok(!t.has('בידור'))               // never budgeted → absent (empty cell)
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

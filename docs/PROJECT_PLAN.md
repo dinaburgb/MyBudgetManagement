@@ -105,6 +105,24 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Edit-category everywhere + Overview budget table (2026-06-13):**
+  - New shared `client/src/TxnRow.jsx`: one compact transaction row (date,
+    description, inline category select, inline note, amount). Used in the Overview
+    and Budgets drill-downs so a charge can be re-filed from anywhere it's shown;
+    `onChanged` refreshes the parent totals. Replaced the old wide rows (narrower
+    drill panels, `max-w-2xl`).
+  - Delete-category now takes a destination: `deleteCategory(db, id, target)` moves
+    its data to `target` (default 'אחר'); route is `DELETE /api/categories/:id?target=`.
+    UI shows an inline destination picker instead of a blind confirm.
+  - Overview "תקציב מול ביצוע" table: category / budget / actual / remaining over
+    the selected months. Budget is the effective limit summed across months
+    (`budgetSummaryForMonths` in `db/budgets.js`), null → empty cell; actual reuses
+    the tab's selected-accounts expenses. Returned as `budgetTable` from
+    `GET /api/stats/overview`.
+  - Tests: +2 in test_categories_store, +1 in test_budgets. Full suite green.
+  - NOTE on bi-monthly bills (water/ארנונה/gas): budgets are monthly, so set the
+    monthly-equivalent (half the bi-monthly charge) and compare over a 2-month
+    range in the Overview table, where the lumpiness averages out.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

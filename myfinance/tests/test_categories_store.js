@@ -89,6 +89,27 @@ test('delete reassigns transactions/rules to אחר and drops its budgets', () =
   assert.ok(!listCategoryNames(db).includes('בידור'))
 })
 
+test('delete with a target moves data to that category, not אחר', () => {
+  const db = freshDb()
+  saveAccountTransactions(account, { accountNumber: '1', txns: [txn({ category: 'בידור' })] }, db)
+  db.prepare(`INSERT INTO category_rules (keyword,category,priority) VALUES ('steam','בידור',0)`).run()
+
+  const res = deleteCategory(db, catId(db, 'בידור'), 'תקשורת')
+
+  assert.strictEqual(res.dest, 'תקשורת')
+  assert.strictEqual(db.prepare(`SELECT category FROM transactions`).get().category, 'תקשורת')
+  assert.strictEqual(db.prepare(`SELECT category FROM category_rules`).get().category, 'תקשורת')
+  assert.ok(!listCategoryNames(db).includes('בידור'))
+})
+
+test('delete with an unknown / empty target falls back to אחר', () => {
+  const db = freshDb()
+  saveAccountTransactions(account, { accountNumber: '1', txns: [txn({ category: 'בידור' })] }, db)
+  const res = deleteCategory(db, catId(db, 'בידור'), 'קטגוריה שלא קיימת')
+  assert.strictEqual(res.dest, 'אחר')
+  assert.strictEqual(db.prepare(`SELECT category FROM transactions`).get().category, 'אחר')
+})
+
 test('system category אחר cannot be deleted', () => {
   const db = freshDb()
   assert.throws(() => deleteCategory(db, catId(db, 'אחר')), e => e.code === 'SYSTEM')

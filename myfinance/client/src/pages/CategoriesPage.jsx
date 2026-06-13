@@ -13,6 +13,8 @@ function CategoryManager({ onChanged }) {
   const [editId,   setEditId]   = useState(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('#60a5fa')
+  const [removing, setRemoving] = useState(null)        // category being deleted
+  const [moveTarget, setMoveTarget] = useState('אחר')   // where its transactions go
 
   async function refresh() { await reload(); onChanged?.() }
 
@@ -42,11 +44,13 @@ function CategoryManager({ onChanged }) {
     }
   }
 
-  async function remove(c) {
-    if (!confirm(`למחוק את הקטגוריה "${c.name}"? התנועות שלה יעברו ל"אחר".`)) return
+  function startRemove(c) { setRemoving(c); setMoveTarget('אחר'); setError('') }
+
+  async function confirmRemove() {
     setError('')
     try {
-      await axios.delete(`/api/categories/${c.id}`)
+      await axios.delete(`/api/categories/${removing.id}`, { params: { target: moveTarget } })
+      setRemoving(null)
       refresh()
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה במחיקה')
@@ -82,6 +86,33 @@ function CategoryManager({ onChanged }) {
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
+      {/* Delete confirmation with a destination picker */}
+      {removing && (
+        <div className="bg-gray-800 border border-gray-700 rounded-lg p-3 mb-4">
+          <div className="text-sm text-white mb-2">
+            מחיקת הקטגוריה <span className="font-medium">"{removing.name}"</span> — להעביר את התנועות שלה אל:
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={moveTarget}
+              onChange={e => setMoveTarget(e.target.value)}
+              className="bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {categories.filter(c => c.name !== removing.name).map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <button onClick={confirmRemove} className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">
+              מחק והעבר
+            </button>
+            <button onClick={() => setRemoving(null)} className="text-gray-400 hover:text-white px-2 py-2 text-sm transition-colors">
+              ביטול
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">אם לא תבחר — התנועות יעברו ל"אחר".</p>
+        </div>
+      )}
+
       {/* Category list */}
       <div className="flex flex-wrap gap-2">
         {categories.map(c => (
@@ -104,7 +135,7 @@ function CategoryManager({ onChanged }) {
               ) : (
                 <>
                   <button onClick={() => startEdit(c)} className="text-gray-500 hover:text-white"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => remove(c)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => startRemove(c)} className="text-gray-500 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                 </>
               )}
             </div>
