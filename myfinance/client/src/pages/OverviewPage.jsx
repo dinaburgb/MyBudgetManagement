@@ -146,6 +146,8 @@ export default function OverviewPage() {
   const monthly = (data?.monthly || []).map(m => ({ ...m, label: monthShort(m.month) }))
   const pie = (data?.byCategory || []).map(c => ({ name: c.category, value: c.expenses }))
   const pieTotal = pie.reduce((s, p) => s + p.value, 0)
+  const incomePie = (data?.incomeByCategory || []).map(c => ({ name: c.category, value: c.income }))
+  const incomePieTotal = incomePie.reduce((s, p) => s + p.value, 0)
   const hasData = data && (data.totals.expenses > 0 || data.totals.income > 0)
 
   // Budget-table totals (over expense rows only — income rows aren't expenses).
@@ -291,6 +293,31 @@ export default function OverviewPage() {
               </div>
             </div>
           </div>
+
+          {/* Income by category — its own pie, separate from expenses */}
+          {incomePie.length > 0 && (
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              <div className="bg-gray-900 rounded-xl p-5">
+                <h3 className="text-white font-medium mb-1">הכנסות לפי קטגוריה</h3>
+                <p className="text-xs text-gray-500 mb-3">לחץ על פלח כדי לראות את התנועות</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <PieChart>
+                    <Pie data={incomePie} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                         innerRadius={58} outerRadius={95} paddingAngle={2}
+                         cursor="pointer" onClick={d => openDrill(d?.name)}>
+                      {incomePie.map(entry => <Cell key={entry.name} fill={colorFor(entry.name)} stroke="#111827" />)}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-between border-t border-gray-800 mt-2 pt-3 text-sm">
+                  <span className="text-gray-400">סה"כ הכנסות</span>
+                  <span className="font-mono text-emerald-400">{ils(incomePieTotal)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Budget table and drill-down — side by side when both are shown */}
           {(data.budgetTable?.length > 0 || drill) && (
