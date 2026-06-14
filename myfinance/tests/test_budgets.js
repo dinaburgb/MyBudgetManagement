@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
-import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions } from '../server/db/budgets.js'
+import { computeBudgetOverview, computeIncomeOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions, budgetEnvelope } from '../server/db/budgets.js'
 import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -156,6 +156,62 @@ test('budgetSuggestions averages spend over the last 6 complete months', () => {
   ] }, db)
   const { suggestions } = budgetSuggestions(db, 6)
   assert.strictEqual(suggestions['מזון'], 100)  // 600 / 6 = 100, rounded to nearest 10
+})
+
+test('carryover accumulates under- and over-spend from effective_from', () => {
+  const db = freshDb()
+  // Budget 1000/month starting April 2026.
+  setBudget(db, 'מזון', 1000, '', '2026-04')
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'מזון', chargedAmount: -800,  date: '2026-04-10T00:00:00.000Z', description: 'apr' }),  // -200 from limit → +200
+    txn({ category: 'מזון', chargedAmount: -1300, date: '2026-05-10T00:00:00.000Z', description: 'may' }),  // over by 300 → -300
+    txn({ category: 'מזון', chargedAmount: -600,  date: '2026-06-10T00:00:00.000Z', description: 'jun' }),  // +400
+  ] }, db)
+  // Through May: (1000-800) + (1000-1300) = 200 - 300 = -100
+  assert.strictEqual(budgetEnvelope(db, '2026-05').get('מזון'), -100)
+  // Through June: -100 + (1000-600) = 300
+  const june = find(computeBudgetOverview(db, '2026-06'), 'מזון')
+  assert.strictEqual(june.carryover, 300)
+  assert.strictEqual(june.remaining, 400)  // monthly remaining is independent
+})
+
+test('effective_from excludes months before the budget started', () => {
+  const db = freshDb()
+  setBudget(db, 'מזון', 1000, '', '2026-06')  // starts June
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'מזון', chargedAmount: -5000, date: '2026-03-10T00:00:00.000Z', description: 'march' }), // before start, ignored
+    txn({ category: 'מזון', chargedAmount: -700,  date: '2026-06-10T00:00:00.000Z', description: 'june' }),
+  ] }, db)
+  const june = find(computeBudgetOverview(db, '2026-06'), 'מזון')
+  assert.strictEqual(june.carryover, 300)  // only June counts: 1000 - 700
+  assert.strictEqual(june.effectiveFrom, '2026-06')
+})
+
+test('income categories are split out: earned vs target, kept out of expense rows', () => {
+  const db = freshDb()
+  db.prepare(`UPDATE categories SET is_income = 1 WHERE name = 'בריאות'`).run()  // treat as income for the test
+  setBudget(db, 'בריאות', 18000)  // expected monthly income (target)
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'בריאות', chargedAmount: 17000, description: 'salary' }),
+    txn({ category: 'בריאות', chargedAmount: 200,   description: 'bonus' }),
+    txn({ category: 'מזון',   chargedAmount: -300,  description: 'food' }),
+  ] }, db)
+
+  // Not among the expense tiles.
+  const expense = computeBudgetOverview(db, '2026-06')
+  assert.ok(!expense.find(r => r.category === 'בריאות'), 'income category must not appear in expense rows')
+
+  const income = computeIncomeOverview(db, '2026-06')
+  const row = income.find(r => r.category === 'בריאות')
+  assert.strictEqual(row.kind, 'income')
+  assert.strictEqual(row.limit, 18000)
+  assert.strictEqual(row.earned, 17200)        // 17000 + 200, positives only
+  assert.strictEqual(row.remaining, 800)       // 18000 - 17200 short of target
+})
+
+test('computeIncomeOverview is empty when no income categories exist', () => {
+  const db = freshDb()
+  assert.deepStrictEqual(computeIncomeOverview(db, '2026-06'), [])
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

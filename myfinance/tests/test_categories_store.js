@@ -9,7 +9,7 @@ import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import {
   seedCategories, listCategoryNames, addCategory, updateCategory, deleteCategory,
-  listCategories, incomeCategoryNames, excludedCategoryNames,
+  listCategories, incomeCategoryNames, excludedCategoryNames, moveCategory,
 } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -140,6 +140,21 @@ test('is_income flag is settable, listed, and rename keeps it', () => {
   // can be turned back off
   updateCategory(db, catId(db, 'משכורת'), { is_income: false })
   assert.ok(!incomeCategoryNames(db).includes('משכורת'))
+})
+
+test('moveCategory swaps display order up and down, stops at the edges', () => {
+  const db = freshDb()
+  const order = () => listCategoryNames(db)
+  const names = order()
+  const first = names[0], second = names[1]
+  // Move the second category up — it should swap with the first.
+  assert.strictEqual(moveCategory(db, catId(db, second), 'up'), true)
+  assert.deepStrictEqual(order().slice(0, 2), [second, first])
+  // Move it back down.
+  assert.strictEqual(moveCategory(db, catId(db, second), 'down'), true)
+  assert.deepStrictEqual(order().slice(0, 2), [first, second])
+  // The top category can't move up any further.
+  assert.strictEqual(moveCategory(db, catId(db, first), 'up'), false)
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

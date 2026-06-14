@@ -255,6 +255,27 @@ Status of each bank / card integration:
   - UI: up/down arrows per row, ברוטו/התחייבויות/נטו summary cards, by-category +
     by-type breakdown cards, category badge, liabilities shown in red with a minus.
   - Tests: `tests/test_assets.js` now 11 (added liability net, by-category, move).
+- **Budgets rework: donut tiles, start date, carryover, income (2026-06-14):**
+  - Budgets page redesigned from wide rows into a compact donut-tile grid
+    (`client/src/pages/BudgetsPage.jsx`): center shows spent (big) + monthly
+    remaining/חריגה (small); below: monthly limit + accumulated balance. Clicking a
+    tile opens a modal editor (amount, scope, suggestion, transactions drill-down).
+  - Budget start date: new `budgets.effective_from` ('YYYY-MM', '' = legacy/always;
+    migration in `database.js`). The recurring default applies only from that month
+    onward. Editor lets you pick the start month ("תקציב קבוע — חל מהחודש").
+  - Accumulated envelope balance ("מצטבר", +/−): `budgetEnvelope` sums
+    (limit − spent) over every month from a category's start through the selected
+    month — both under- and over-spend carry forward. Returned per row as
+    `carryover` from `computeBudgetOverview`.
+  - Category reordering: `moveCategory(db, id, direction)` swaps `sort_order` with
+    the same-section neighbour (income vs expense kept independent); route
+    `PUT /api/categories/:id/move`. Up/down arrows on every tile.
+  - Income split out: `computeIncomeOverview` returns income-flagged categories with
+    an expected-income target (their "budget") vs actual earned. They no longer sit
+    among expense tiles. New balance plaque (income / expenses / מאזן, בתקציב vs
+    בפועל) + a separate "הכנסות" tile section. Overview route returns `incomeRows`.
+  - Tests: `tests/test_budgets.js` now 15 (carryover, effective_from, income split);
+    `tests/test_categories_store.js` now 11 (moveCategory).
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

@@ -59,6 +59,39 @@ export function migrateFuelToVehicle(db = getDb()) {
   return 0
 }
 
+/**
+ * Move a category one step up or down in the manual display order by swapping its
+ * sort_order with the adjacent neighbour. `direction` is 'up' or 'down'. Returns
+ * true if a swap happened, false if the category is already at the edge.
+ * Mirrors moveAccount in accounts.js.
+ */
+export function moveCategory(db, id, direction) {
+  const me = db.prepare(`SELECT id, sort_order, is_income FROM categories WHERE id = ?`).get(id)
+  if (!me) return false
+  // 'up' = higher in the list = a smaller sort_order. Tie-break on id so equal
+  // sort_orders still move. Stay within the same section (income vs expense) so the
+  // Budgets page reorders income among income and expenses among expenses.
+  const neighbour = direction === 'up'
+    ? db.prepare(`SELECT id, sort_order FROM categories
+                  WHERE is_income = ? AND (sort_order < ? OR (sort_order = ? AND id < ?))
+                  ORDER BY sort_order DESC, id DESC LIMIT 1`).get(me.is_income, me.sort_order, me.sort_order, me.id)
+    : db.prepare(`SELECT id, sort_order FROM categories
+                  WHERE is_income = ? AND (sort_order > ? OR (sort_order = ? AND id > ?))
+                  ORDER BY sort_order ASC, id ASC LIMIT 1`).get(me.is_income, me.sort_order, me.sort_order, me.id)
+  if (!neighbour) return false
+
+  db.exec('BEGIN')
+  try {
+    db.prepare(`UPDATE categories SET sort_order = ? WHERE id = ?`).run(neighbour.sort_order, me.id)
+    db.prepare(`UPDATE categories SET sort_order = ? WHERE id = ?`).run(me.sort_order, neighbour.id)
+    db.exec('COMMIT')
+  } catch (err) {
+    db.exec('ROLLBACK')
+    throw err
+  }
+  return true
+}
+
 /** All categories, ordered for display. */
 export function listCategories(db = getDb()) {
   return db.prepare(

@@ -9,7 +9,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { computeBudgetOverview, setBudget, deleteBudget, isValidMonth, budgetCategoryTransactions, budgetSuggestions } from '../db/budgets.js'
+import { computeBudgetOverview, computeIncomeOverview, setBudget, deleteBudget, isValidMonth, budgetCategoryTransactions, budgetSuggestions } from '../db/budgets.js'
 
 const router = Router()
 
@@ -28,8 +28,10 @@ function currentMonth() {
 /** GET /api/budgets/overview — all categories with limit/spent/remaining for a month */
 router.get('/overview', (req, res) => {
   const month = isValidMonth(req.query.month) ? req.query.month : currentMonth()
-  const rows = computeBudgetOverview(getDb(), month)
-  res.json({ month, rows })
+  const db = getDb()
+  const rows = computeBudgetOverview(db, month)
+  const incomeRows = computeIncomeOverview(db, month)
+  res.json({ month, rows, incomeRows })
 })
 
 /** GET /api/budgets/suggestions — suggested monthly budgets from the last 6 months */
@@ -47,7 +49,7 @@ router.get('/transactions', (req, res) => {
 
 /** PUT /api/budgets — set or update a limit */
 router.put('/', (req, res) => {
-  const { category, amount, month = '' } = req.body
+  const { category, amount, month = '', effective_from = '' } = req.body
   const amt = Number(amount)
   if (!category || amount == null || !Number.isFinite(amt) || amt < 0) {
     return res.status(400).json({ error: 'category and a non-negative numeric amount are required' })
@@ -55,7 +57,10 @@ router.put('/', (req, res) => {
   if (month !== '' && !isValidMonth(month)) {
     return res.status(400).json({ error: 'month must be empty or YYYY-MM' })
   }
-  setBudget(getDb(), category, Number(amount), month)
+  if (effective_from !== '' && !isValidMonth(effective_from)) {
+    return res.status(400).json({ error: 'effective_from must be empty or YYYY-MM' })
+  }
+  setBudget(getDb(), category, Number(amount), month, effective_from)
   res.json({ message: 'Budget saved' })
 })
 

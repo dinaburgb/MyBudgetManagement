@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronLeft } from 'lucide-react'
+import { ChevronUp, ChevronDown, X } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
@@ -22,55 +22,182 @@ function currentMonthKey() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
-
-// Pick the bar color by how much of the budget is used.
-function barTone(ratio) {
-  if (ratio >= 1) return 'bg-red-500'
-  if (ratio >= 0.8) return 'bg-amber-500'
-  return 'bg-green-500'
+function monthLabel(key) {
+  if (!key) return ''
+  const [y, m] = key.split('-').map(Number)
+  return `${HE_MONTHS[m - 1]} ${y}`
 }
 
-function BudgetRow({ row, month, onlyThisMonth, suggestion, onSaved }) {
+// Ring color by how much of the monthly budget is used.
+function toneColor(ratio) {
+  if (ratio >= 1) return '#ef4444'    // red — over budget
+  if (ratio >= 0.8) return '#f59e0b'  // amber — getting close
+  return '#22c55e'                    // green — comfortable
+}
+const TRACK = '#374151'  // gray-700
+
+/** A compact donut tile for one category. */
+function BudgetTile({ row, catId, isFirst, isLast, onMove, onOpen }) {
   const { colorFor } = useCategories()
-  const [value, setValue] = useState(row.limit ?? '')
-  const [saving, setSaving] = useState(false)
-
-  // Drill-down: this category's transactions for the selected month.
-  const [open, setOpen] = useState(false)
-  const [txns, setTxns] = useState(null)        // null = not loaded yet
-  const [txLoading, setTxLoading] = useState(false)
-
-  useEffect(() => { setValue(row.limit ?? '') }, [row.limit, month])
-  // Collapse and drop cached transactions whenever the month changes.
-  useEffect(() => { setOpen(false); setTxns(null) }, [month])
-
-  async function loadTxns() {
-    setTxLoading(true)
-    try {
-      const res = await axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
-      setTxns(res.data.rows)
-    } catch {
-      setTxns([])
-    } finally {
-      setTxLoading(false)
-    }
-  }
-  async function toggleDrill() {
-    const next = !open
-    setOpen(next)
-    if (next && txns === null) await loadTxns()
-  }
-  // A category change moves a charge out of this bucket: refresh the list and the
-  // whole month's totals.
-  function onTxnChanged() {
-    loadTxns()
-    onSaved()
-  }
-
   const limit = row.limit
   const ratio = limit ? row.spent / limit : 0
   const pct = Math.min(ratio * 100, 100)
   const over = limit != null && row.remaining < 0
+
+  // Donut geometry.
+  const R = 40, C = 2 * Math.PI * R
+  const dash = (pct / 100) * C
+  const ring = limit != null ? toneColor(ratio) : TRACK
+
+  return (
+    <div className="relative bg-gray-900 rounded-xl p-3 flex flex-col items-center">
+      {/* Reorder arrows */}
+      {catId != null && (
+        <div className="absolute top-2 right-2 flex flex-col gap-0.5">
+          <button
+            onClick={() => onMove(catId, 'up')}
+            disabled={isFirst}
+            className="text-gray-600 hover:text-white disabled:opacity-20 disabled:hover:text-gray-600 transition-colors"
+            title="הזז למעלה"
+          >
+            <ChevronUp className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onMove(catId, 'down')}
+            disabled={isLast}
+            className="text-gray-600 hover:text-white disabled:opacity-20 disabled:hover:text-gray-600 transition-colors"
+            title="הזז למטה"
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Donut — click to edit */}
+      <button onClick={() => onOpen(row)} className="relative w-28 h-28 mt-1" title="ערוך תקציב">
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r={R} fill="none" stroke={TRACK} strokeWidth="9" />
+          {limit != null && pct > 0 && (
+            <circle
+              cx="50" cy="50" r={R} fill="none" stroke={ring} strokeWidth="9"
+              strokeDasharray={`${dash} ${C - dash}`} strokeLinecap="round"
+              className="transition-all"
+            />
+          )}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-bold text-white leading-none">{ils(row.spent)}</span>
+          {limit != null ? (
+            <span className={`text-xs mt-1 ${over ? 'text-red-400' : 'text-gray-400'}`}>
+              {over ? `חריגה ${ils(-row.remaining)}` : `נותרו ${ils(row.remaining)}`}
+            </span>
+          ) : (
+            <span className="text-xs mt-1 text-gray-600">אין תקציב</span>
+          )}
+        </div>
+      </button>
+
+      {/* Category name */}
+      <div className="flex items-center gap-1.5 mt-2 text-center">
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorFor(row.category) }} />
+        <span className="text-sm text-white font-medium leading-tight">{row.category}</span>
+      </div>
+
+      {/* Budget + accumulated balance */}
+      {limit != null && (
+        <div className="mt-1 text-center text-xs leading-snug">
+          <div className="text-gray-500">תקציב {ils(limit)}</div>
+          {row.carryover != null && (
+            <div className={row.carryover >= 0 ? 'text-green-400' : 'text-red-400'}>
+              מצטבר {row.carryover >= 0 ? '+' : '−'}{ils(Math.abs(row.carryover))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A compact donut tile for one income category: earned vs expected target. */
+function IncomeTile({ row, catId, isFirst, isLast, onMove, onOpen }) {
+  const { colorFor } = useCategories()
+  const target = row.limit
+  const ratio = target ? Math.min(row.earned / target, 1) : 0
+  const pct = ratio * 100
+  const reached = target != null && row.earned >= target
+
+  const R = 40, C = 2 * Math.PI * R
+  const dash = (pct / 100) * C
+
+  return (
+    <div className="relative bg-gray-900 rounded-xl p-3 flex flex-col items-center">
+      {catId != null && (
+        <div className="absolute top-2 right-2 flex flex-col gap-0.5">
+          <button onClick={() => onMove(catId, 'up')} disabled={isFirst}
+            className="text-gray-600 hover:text-white disabled:opacity-20 disabled:hover:text-gray-600 transition-colors" title="הזז למעלה">
+            <ChevronUp className="w-4 h-4" />
+          </button>
+          <button onClick={() => onMove(catId, 'down')} disabled={isLast}
+            className="text-gray-600 hover:text-white disabled:opacity-20 disabled:hover:text-gray-600 transition-colors" title="הזז למטה">
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <button onClick={() => onOpen(row)} className="relative w-28 h-28 mt-1" title="ערוך הכנסה צפויה">
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r={R} fill="none" stroke={TRACK} strokeWidth="9" />
+          {target != null && pct > 0 && (
+            <circle cx="50" cy="50" r={R} fill="none" stroke="#10b981" strokeWidth="9"
+              strokeDasharray={`${dash} ${C - dash}`} strokeLinecap="round" className="transition-all" />
+          )}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-xl font-bold text-emerald-400 leading-none">{ils(row.earned)}</span>
+          {target != null ? (
+            <span className="text-xs mt-1 text-gray-400">מתוך {ils(target)}</span>
+          ) : (
+            <span className="text-xs mt-1 text-gray-600">אין יעד</span>
+          )}
+        </div>
+      </button>
+
+      <div className="flex items-center gap-1.5 mt-2 text-center">
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorFor(row.category) }} />
+        <span className="text-sm text-white font-medium leading-tight">{row.category}</span>
+      </div>
+
+      {target != null && (
+        <div className="mt-1 text-center text-xs leading-snug">
+          {reached
+            ? <div className="text-green-400">מעל היעד +{ils(row.earned - target)}</div>
+            : <div className="text-gray-500">חסר {ils(target - row.earned)}</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Modal editor for a single category's budget + transactions drill-down.
+ *  `isIncome` switches the wording from a spending limit to an expected-income target. */
+function BudgetEditor({ row, month, suggestion, isIncome = false, onClose, onSaved }) {
+  const options = monthOptions()
+  const [value, setValue] = useState(row.limit ?? '')
+  const [saving, setSaving] = useState(false)
+  // Scope: 'recurring' = a default applying from `from` onward; 'month' = this month only.
+  const [scope, setScope] = useState(row.source === 'month' ? 'month' : 'recurring')
+  const [from, setFrom] = useState(row.effectiveFrom || month)
+
+  const [txns, setTxns] = useState(null)
+  const [txLoading, setTxLoading] = useState(true)
+
+  useEffect(() => {
+    setTxLoading(true)
+    axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
+      .then(res => setTxns(res.data.rows))
+      .catch(() => setTxns([]))
+      .finally(() => setTxLoading(false))
+  }, [row.category, month])
 
   async function save() {
     if (value === '' || isNaN(Number(value))) return
@@ -79,9 +206,11 @@ function BudgetRow({ row, month, onlyThisMonth, suggestion, onSaved }) {
       await axios.put('/api/budgets', {
         category: row.category,
         amount: Number(value),
-        month: onlyThisMonth ? month : '',
+        month: scope === 'month' ? month : '',
+        effective_from: scope === 'recurring' ? from : '',
       })
       onSaved()
+      onClose()
     } finally {
       setSaving(false)
     }
@@ -90,128 +219,138 @@ function BudgetRow({ row, month, onlyThisMonth, suggestion, onSaved }) {
   async function clear() {
     setSaving(true)
     try {
-      await axios.delete('/api/budgets', { data: { category: row.category, month: onlyThisMonth ? month : '' } })
+      // Clear whichever scope currently provides the limit.
+      await axios.delete('/api/budgets', { data: { category: row.category, month: row.source === 'month' ? month : '' } })
       onSaved()
+      onClose()
     } finally {
       setSaving(false)
     }
   }
 
+  function onTxnChanged() {
+    axios.get('/api/budgets/transactions', { params: { category: row.category, month } })
+      .then(res => setTxns(res.data.rows)).catch(() => {})
+    onSaved()
+  }
+
   return (
-    <div className="bg-gray-900 rounded-xl p-4">
-      <div className="flex items-center justify-between mb-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div
+        className="bg-gray-900 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-white">{row.category} · {monthLabel(month)}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Amount */}
         <div className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded-full" style={{ background: colorFor(row.category) }} />
-          <span className="text-white font-medium">{row.category}</span>
-          {row.source === 'month' && (
-            <span className="text-xs text-blue-400 bg-blue-500/10 rounded px-1.5 py-0.5">לחודש זה</span>
+          <div className="relative flex-1">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₪</span>
+            <input
+              type="number"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') save() }}
+              placeholder={isIncome ? 'הגדר הכנסה צפויה' : 'הגדר תקציב חודשי'}
+              autoFocus
+              className="w-full bg-gray-800 text-white rounded-lg pr-8 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+            />
+          </div>
+          <button
+            onClick={save}
+            disabled={saving}
+            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            שמור
+          </button>
+          {row.limit != null && (
+            <button
+              onClick={clear}
+              disabled={saving}
+              className="text-gray-500 hover:text-red-400 px-2 py-2 text-sm transition-colors"
+            >
+              נקה
+            </button>
           )}
         </div>
-        {row.spent > 0 ? (
+
+        {/* Suggestion */}
+        {suggestion > 0 && Number(value) !== suggestion && (
           <button
-            onClick={toggleDrill}
-            className="flex items-center gap-1 text-sm font-mono text-gray-300 hover:text-white transition-colors"
-            title="הצג תנועות"
+            onClick={() => setValue(String(suggestion))}
+            className="mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            title="ממוצע חודשי על פני 6 החודשים האחרונים"
           >
-            {open ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronLeft className="w-4 h-4 text-gray-500" />}
-            {ils(row.spent)}{limit != null && <span className="text-gray-500"> / {ils(limit)}</span>}
+            הצע לפי 6 חודשים: ₪{suggestion.toLocaleString('he-IL')} (לחץ למילוי)
           </button>
-        ) : (
-          <div className="text-sm font-mono text-gray-300">
-            {ils(row.spent)}{limit != null && <span className="text-gray-500"> / {ils(limit)}</span>}
+        )}
+
+        {/* Scope */}
+        <div className="mt-4 space-y-2 text-sm">
+          <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <input type="radio" name="scope" checked={scope === 'recurring'}
+              onChange={() => setScope('recurring')} className="accent-blue-600" />
+            תקציב קבוע — חל מהחודש:
+            <select
+              value={from}
+              onChange={e => setFrom(e.target.value)}
+              disabled={scope !== 'recurring'}
+              className="bg-gray-800 text-white rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {options.slice().reverse().map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+            <input type="radio" name="scope" checked={scope === 'month'}
+              onChange={() => setScope('month')} className="accent-blue-600" />
+            רק לחודש זה ({monthLabel(month)})
+          </label>
+        </div>
+
+        {/* Accumulated balance reminder */}
+        {row.carryover != null && (
+          <div className="mt-3 text-xs text-gray-400">
+            יתרה מצטברת מתחילת התקציב:{' '}
+            <span className={row.carryover >= 0 ? 'text-green-400' : 'text-red-400'}>
+              {row.carryover >= 0 ? '+' : '−'}{ils(Math.abs(row.carryover))}
+            </span>
           </div>
         )}
-      </div>
 
-      {/* Progress bar */}
-      {limit != null ? (
-        <>
-          <div className="h-2.5 rounded-full bg-gray-800 overflow-hidden">
-            <div className={`h-full ${barTone(ratio)} transition-all`} style={{ width: `${pct}%` }} />
-          </div>
-          <div className="flex justify-between mt-1 text-xs">
-            <span className={over ? 'text-red-400' : 'text-gray-500'}>
-              {over ? `חריגה ב-${ils(-row.remaining)}` : `נותרו ${ils(row.remaining)}`}
-            </span>
-            <span className="text-gray-500">{Math.round(ratio * 100)}%</span>
-          </div>
-        </>
-      ) : (
-        <div className="text-xs text-gray-500">לא הוגדר תקציב</div>
-      )}
-
-      {/* Drill-down: this category's transactions for the month */}
-      {open && (
-        <div className="mt-3 border-t border-gray-800 pt-3">
+        {/* Transactions */}
+        <div className="mt-4 border-t border-gray-800 pt-3">
+          <div className="text-sm text-gray-400 mb-2">תנועות החודש</div>
           {txLoading ? (
             <div className="text-gray-400 text-sm">טוען תנועות...</div>
           ) : !txns || txns.length === 0 ? (
             <div className="text-gray-500 text-sm">אין תנועות בקטגוריה זו לחודש הנבחר.</div>
           ) : (
-            <div className="max-h-80 overflow-y-auto">
+            <div className="max-h-72 overflow-y-auto">
               <table className="w-full text-sm">
                 <tbody>
-                  {txns.map(t => (
-                    <TxnRow key={t.id} txn={t} onChanged={onTxnChanged} />
-                  ))}
+                  {txns.map(t => <TxnRow key={t.id} txn={t} onChanged={onTxnChanged} />)}
                 </tbody>
               </table>
             </div>
           )}
         </div>
-      )}
-
-      {/* Editor */}
-      <div className="flex items-center gap-2 mt-3">
-        <div className="relative flex-1">
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₪</span>
-          <input
-            type="number"
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') save() }}
-            placeholder="הגדר תקציב חודשי"
-            className="w-full bg-gray-800 text-white rounded-lg pr-8 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-          />
-        </div>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          שמור
-        </button>
-        {limit != null && (
-          <button
-            onClick={clear}
-            disabled={saving}
-            className="text-gray-500 hover:text-red-400 px-2 py-2 text-sm transition-colors"
-          >
-            נקה
-          </button>
-        )}
       </div>
-
-      {/* Suggestion based on the last 6 months */}
-      {suggestion > 0 && Number(value) !== suggestion && (
-        <button
-          onClick={() => setValue(String(suggestion))}
-          className="mt-2 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-          title="ממוצע חודשי על פני 6 החודשים האחרונים"
-        >
-          הצע לפי 6 חודשים: ₪{suggestion.toLocaleString('he-IL')} (לחץ למילוי)
-        </button>
-      )}
     </div>
   )
 }
 
 export default function BudgetsPage() {
+  const { categories, reload: reloadCategories } = useCategories()
   const [month, setMonth] = useState(currentMonthKey())
-  const [data, setData]   = useState(null)
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [onlyThisMonth, setOnlyThisMonth] = useState(false)
-  const [suggestions, setSuggestions] = useState({})   // category -> suggested monthly budget
+  const [suggestions, setSuggestions] = useState({})
+  const [editing, setEditing] = useState(null)   // the row being edited, or null
   const options = monthOptions()
 
   async function load() {
@@ -226,19 +365,35 @@ export default function BudgetsPage() {
   }
 
   useEffect(() => { load() }, [month])
-  // Suggested budgets from the last 6 months (independent of the selected month).
   useEffect(() => {
     axios.get('/api/budgets/suggestions')
       .then(res => setSuggestions(res.data.suggestions || {}))
       .catch(() => setSuggestions({}))
   }, [])
 
+  // Map category name -> id for the reorder controls.
+  const idByName = Object.fromEntries(categories.map(c => [c.name, c.id]))
+
+  async function move(catId, direction) {
+    await axios.put(`/api/categories/${catId}/move`, { direction })
+    await reloadCategories()   // refresh sort_order in the shared list
+    await load()               // overview re-orders to match
+  }
+
   if (loading) return <div className="text-gray-400">טוען תקציבים...</div>
 
   const rows = data?.rows || []
-  const totalLimit = rows.reduce((s, r) => s + (r.limit || 0), 0)
-  const totalSpent = rows.reduce((s, r) => s + r.spent, 0)
-  const ratio = totalLimit ? totalSpent / totalLimit : 0
+  const incomeRows = data?.incomeRows || []
+
+  // Plan vs actual for the balance plaque.
+  const plannedExpense = rows.reduce((s, r) => s + (r.limit || 0), 0)
+  const actualExpense  = rows.reduce((s, r) => s + r.spent, 0)
+  const plannedIncome  = incomeRows.reduce((s, r) => s + (r.limit || 0), 0)
+  const actualIncome   = incomeRows.reduce((s, r) => s + r.earned, 0)
+  const plannedBalance = plannedIncome - plannedExpense
+  const actualBalance  = actualIncome - actualExpense
+  const balanceClass = v => v >= 0 ? 'text-green-400' : 'text-red-400'
+  const signed = v => `${v >= 0 ? '+' : '−'}${ils(Math.abs(v))}`
 
   return (
     <div className="max-w-3xl">
@@ -253,43 +408,74 @@ export default function BudgetsPage() {
         </select>
       </div>
 
-      {/* Total summary */}
-      {totalLimit > 0 && (
-        <div className="bg-gray-900 rounded-xl p-5 mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-white font-medium">סך הכול החודש</span>
-            <span className="font-mono text-gray-300">{ils(totalSpent)} <span className="text-gray-500">/ {ils(totalLimit)}</span></span>
-          </div>
-          <div className="h-3 rounded-full bg-gray-800 overflow-hidden">
-            <div className={`h-full ${barTone(ratio)} transition-all`} style={{ width: `${Math.min(ratio * 100, 100)}%` }} />
+      {/* Balance plaque: income − expenses, planned vs actual */}
+      <div className="bg-gray-900 rounded-xl p-5 mb-5">
+        <div className="grid grid-cols-3 gap-2 items-center text-sm">
+          <div></div>
+          <div className="text-center text-gray-500 text-xs">בתקציב</div>
+          <div className="text-center text-gray-500 text-xs">בפועל</div>
+
+          <div className="text-gray-300">הכנסות</div>
+          <div className="text-center font-mono text-gray-400">{ils(plannedIncome)}</div>
+          <div className="text-center font-mono text-emerald-400">{ils(actualIncome)}</div>
+
+          <div className="text-gray-300">הוצאות</div>
+          <div className="text-center font-mono text-gray-400">{ils(plannedExpense)}</div>
+          <div className="text-center font-mono text-gray-300">{ils(actualExpense)}</div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 items-center mt-3 pt-3 border-t border-gray-800">
+          <div className="text-white font-medium">מאזן</div>
+          <div className={`text-center font-mono font-bold ${balanceClass(plannedBalance)}`}>{signed(plannedBalance)}</div>
+          <div className={`text-center font-mono font-bold text-lg ${balanceClass(actualBalance)}`}>{signed(actualBalance)}</div>
+        </div>
+      </div>
+
+      {/* Income section */}
+      {incomeRows.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-400 mb-2">הכנסות</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {incomeRows.map((row, i) => (
+              <IncomeTile
+                key={row.category}
+                row={row}
+                catId={idByName[row.category]}
+                isFirst={i === 0}
+                isLast={i === incomeRows.length - 1}
+                onMove={move}
+                onOpen={setEditing}
+              />
+            ))}
           </div>
         </div>
       )}
 
-      {/* Scope toggle */}
-      <label className="flex items-center gap-2 mb-4 text-sm text-gray-400 cursor-pointer select-none w-fit">
-        <input
-          type="checkbox"
-          checked={onlyThisMonth}
-          onChange={e => setOnlyThisMonth(e.target.checked)}
-          className="w-4 h-4 accent-blue-600"
-        />
-        החל שינויים על החודש הנבחר בלבד (אחרת — תקציב קבוע לכל חודש)
-      </label>
-
-      {/* Per-category rows */}
-      <div className="space-y-3">
-        {rows.map(row => (
-          <BudgetRow
+      {/* Expense tiles */}
+      <h3 className="text-sm font-medium text-gray-400 mb-2">הוצאות</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {rows.map((row, i) => (
+          <BudgetTile
             key={row.category}
             row={row}
-            month={month}
-            onlyThisMonth={onlyThisMonth}
-            suggestion={suggestions[row.category]}
-            onSaved={load}
+            catId={idByName[row.category]}
+            isFirst={i === 0}
+            isLast={i === rows.length - 1}
+            onMove={move}
+            onOpen={setEditing}
           />
         ))}
       </div>
+
+      {editing && (
+        <BudgetEditor
+          row={editing}
+          month={month}
+          suggestion={suggestions[editing.category]}
+          isIncome={editing.kind === 'income'}
+          onClose={() => setEditing(null)}
+          onSaved={load}
+        />
+      )}
     </div>
   )
 }
