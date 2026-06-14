@@ -330,7 +330,7 @@ function BudgetEditor({ row, month, suggestion, isIncome = false, onClose, onSav
           ) : !txns || txns.length === 0 ? (
             <div className="text-gray-500 text-sm">אין תנועות בקטגוריה זו לחודש הנבחר.</div>
           ) : (
-            <div className="max-h-72 overflow-y-auto">
+            <div className="max-h-72 overflow-y-auto pl-3">
               <table className="w-full text-sm">
                 <tbody>
                   {txns.map(t => <TxnRow key={t.id} txn={t} onChanged={onTxnChanged} />)}

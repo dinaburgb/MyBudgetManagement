@@ -338,7 +338,7 @@ export default function OverviewPage() {
                   ) : drill.rows.length === 0 ? (
                     <div className="text-gray-500 text-sm">אין חיובים בקטגוריה זו לבחירה הנוכחית.</div>
                   ) : (
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="max-h-96 overflow-y-auto pl-3">
                       <table className="w-full text-sm">
                         <tbody>
                           {drill.rows.map(r => (
