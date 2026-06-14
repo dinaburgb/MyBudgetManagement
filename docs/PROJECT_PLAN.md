@@ -276,6 +276,15 @@ Status of each bank / card integration:
     בפועל) + a separate "הכנסות" tile section. Overview route returns `incomeRows`.
   - Tests: `tests/test_budgets.js` now 15 (carryover, effective_from, income split);
     `tests/test_categories_store.js` now 11 (moveCategory).
+- **One-click close: app window + terminal (2026-06-14):**
+  - Server opens the app in a dedicated Chrome/Edge `--app` window on startup
+    (`openAppWindow` in `server/index.js`; Windows-first, falls back to default
+    browser; `NO_OPEN=1` skips it). An app window has a single history entry, so
+    the in-app close button's `window.close()` is allowed to shut it.
+  - "סגירת התוכנה" now also calls `window.close()` after `/api/app/shutdown`
+    (Dashboard.jsx); the end screen stays as a fallback for manually-opened tabs.
+  - `myfinance/MyBudget.bat` launcher: double-click to start; when the server
+    exits (close button), the process ends and the cmd window closes itself.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
