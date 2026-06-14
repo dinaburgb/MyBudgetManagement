@@ -49,9 +49,41 @@ export function listSubAccounts(db, accountId) {
     `SELECT account_number FROM excluded_subaccounts WHERE account_id = ?`
   ).all(accountId).map(r => r.account_number))
 
+  // User-given nicknames, keyed by account number (absent = no label).
+  const labels = new Map(db.prepare(
+    `SELECT account_number, label FROM subaccount_labels WHERE account_id = ?`
+  ).all(accountId).map(r => [r.account_number, r.label]))
+
   return [...byNumber.values()]
-    .map(s => ({ ...s, included: !excluded.has(s.account_number) }))
+    .map(s => ({
+      ...s,
+      included: !excluded.has(s.account_number),
+      label: labels.get(s.account_number) || '',
+    }))
     .sort((a, b) => b.txn_count - a.txn_count)
+}
+
+/**
+ * Every sub-account number seen across all logins, with its parent login name,
+ * nickname (label) and transaction count. Used to populate the transactions
+ * filter so the user can narrow to one card/number. Only numbers that actually
+ * appear on transactions are listed.
+ */
+export function listAllSubAccounts(db) {
+  return db.prepare(`
+    SELECT t.account_id,
+           a.name           AS account_name,
+           a.source         AS source,
+           t.account_number,
+           COUNT(*)         AS txn_count,
+           (SELECT label FROM subaccount_labels sl
+              WHERE sl.account_id = t.account_id AND sl.account_number = t.account_number) AS label
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE t.account_number IS NOT NULL
+    GROUP BY t.account_id, t.account_number
+    ORDER BY a.name, txn_count DESC
+  `).all()
 }
 
 /** Include or exclude one account number from totals. */
@@ -68,4 +100,23 @@ export function setSubAccountIncluded(db, accountId, accountNumber, include) {
 /** Whether a login has any individually-excluded numbers (for list badges). */
 export function hasExcludedSubAccounts(db, accountId) {
   return !!db.prepare(`SELECT 1 FROM excluded_subaccounts WHERE account_id = ? LIMIT 1`).get(accountId)
+}
+
+/**
+ * Set (or clear) a sub-account's nickname. An empty/blank label removes the row,
+ * so absence consistently means "no nickname".
+ */
+export function setSubAccountLabel(db, accountId, accountNumber, label) {
+  const clean = String(label || '').trim()
+  if (!clean) {
+    db.prepare(`DELETE FROM subaccount_labels WHERE account_id = ? AND account_number = ?`)
+      .run(accountId, accountNumber)
+    return
+  }
+  db.prepare(`
+    INSERT INTO subaccount_labels (account_id, account_number, label)
+    VALUES (?, ?, ?)
+    ON CONFLICT(account_id, account_number)
+    DO UPDATE SET label = excluded.label, updated_at = datetime('now')
+  `).run(accountId, accountNumber, clean)
 }

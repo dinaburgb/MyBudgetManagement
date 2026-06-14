@@ -7,8 +7,8 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
 import { balancesByAccount } from '../db/balances.js'
-import { deleteAccount } from '../db/accounts.js'
-import { listSubAccounts, setSubAccountIncluded } from '../db/subaccounts.js'
+import { deleteAccount, moveAccount } from '../db/accounts.js'
+import { listSubAccounts, listAllSubAccounts, setSubAccountIncluded, setSubAccountLabel } from '../db/subaccounts.js'
 
 const router = Router()
 
@@ -29,7 +29,7 @@ router.get('/', (req, res) => {
            (SELECT COUNT(DISTINCT t.account_number) FROM transactions t
               WHERE t.account_id = accounts.id AND t.account_number IS NOT NULL) AS subaccount_count,
            (SELECT COUNT(*) FROM excluded_subaccounts e WHERE e.account_id = accounts.id) AS excluded_count
-    FROM accounts ORDER BY source, owner
+    FROM accounts ORDER BY sort_order, source, owner
   `).all()
   // Attach the latest known balance per account (null when unknown, e.g. cards).
   const balances = balancesByAccount(db)
@@ -41,16 +41,31 @@ router.get('/', (req, res) => {
   res.json(accounts)
 })
 
+/** GET /api/accounts/subaccounts — every sub-account number across all logins
+ *  (for the transactions filter). Declared before '/:id/subaccounts' so the
+ *  literal path isn't swallowed by the :id param route. */
+router.get('/subaccounts', (req, res) => {
+  res.json(listAllSubAccounts(getDb()))
+})
+
 /** GET /api/accounts/:id/subaccounts — the account numbers under one login */
 router.get('/:id/subaccounts', (req, res) => {
   res.json(listSubAccounts(getDb(), Number(req.params.id)))
 })
 
-/** PUT /api/accounts/:id/subaccounts — include/exclude one number { account_number, include } */
+/**
+ * PUT /api/accounts/:id/subaccounts — update one sub-account.
+ * Body: { account_number, include?, label? }. `include` toggles totals inclusion;
+ * `label` sets/clears the nickname. Either or both may be sent.
+ */
 router.put('/:id/subaccounts', (req, res) => {
-  const { account_number, include } = req.body
+  const { account_number, include, label } = req.body
   if (!account_number) return res.status(400).json({ error: 'account_number is required' })
-  setSubAccountIncluded(getDb(), Number(req.params.id), String(account_number), !!include)
+  const db = getDb()
+  const accId = Number(req.params.id)
+  const number = String(account_number)
+  if ('include' in req.body) setSubAccountIncluded(db, accId, number, !!include)
+  if ('label'   in req.body) setSubAccountLabel(db, accId, number, label)
   res.json({ message: 'Sub-account updated' })
 })
 
@@ -69,12 +84,21 @@ router.post('/', (req, res) => {
 
   const encrypted = encrypt(credentials)
   const db = getDb()
+  // New accounts go to the bottom of the manual order.
+  const nextOrder = (db.prepare(`SELECT MAX(sort_order) AS m FROM accounts`).get().m || 0) + 1
   const result = db.prepare(`
-    INSERT INTO accounts (name, source, owner, credentials)
-    VALUES (?, ?, ?, ?)
-  `).run(name, source, owner || 'Boris', encrypted)
+    INSERT INTO accounts (name, source, owner, credentials, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(name, source, owner || 'Boris', encrypted, nextOrder)
 
   res.json({ id: result.lastInsertRowid, message: 'Account saved' })
+})
+
+/** PUT /api/accounts/:id/move — reorder one step { direction: 'up' | 'down' } */
+router.put('/:id/move', (req, res) => {
+  const direction = req.body?.direction === 'up' ? 'up' : 'down'
+  const moved = moveAccount(getDb(), Number(req.params.id), direction)
+  res.json({ message: moved ? 'Account moved' : 'Already at edge', moved })
 })
 
 /** PUT /api/accounts/:id — update an account */

@@ -8,7 +8,7 @@ import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import { upsertBalance } from '../server/db/balances.js'
-import { deleteAccount } from '../server/db/accounts.js'
+import { deleteAccount, moveAccount } from '../server/db/accounts.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -79,6 +79,50 @@ test('clean only affects the targeted account', () => {
   const c = counts(db)
   assert.strictEqual(c.accounts, 1)   // account 2 remains
   assert.strictEqual(c.txns, 1)       // its transaction remains
+})
+
+// --- Reordering (moveAccount) ---
+
+// Three accounts with sort_order 1,2,3. Returns their ids in display order.
+function seedThree() {
+  const db = new DatabaseSync(':memory:')
+  db.exec(SCHEMA_SQL)
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (1,'A','cal','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (2,'B','max','Boris','x',2)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (3,'C','isracard','Boris','x',3)`).run()
+  return db
+}
+const order = db => db.prepare(`SELECT id FROM accounts ORDER BY sort_order, id`).all().map(r => r.id)
+
+test('moveAccount down swaps with the next account', () => {
+  const db = seedThree()
+  assert.strictEqual(moveAccount(db, 1, 'down'), true)
+  assert.deepStrictEqual(order(db), [2, 1, 3])
+})
+
+test('moveAccount up swaps with the previous account', () => {
+  const db = seedThree()
+  assert.strictEqual(moveAccount(db, 3, 'up'), true)
+  assert.deepStrictEqual(order(db), [1, 3, 2])
+})
+
+test('moving the top account up is a no-op (already at edge)', () => {
+  const db = seedThree()
+  assert.strictEqual(moveAccount(db, 1, 'up'), false)
+  assert.deepStrictEqual(order(db), [1, 2, 3])
+})
+
+test('moving the bottom account down is a no-op (already at edge)', () => {
+  const db = seedThree()
+  assert.strictEqual(moveAccount(db, 3, 'down'), false)
+  assert.deepStrictEqual(order(db), [1, 2, 3])
+})
+
+test('two moves down push an account from top to bottom', () => {
+  const db = seedThree()
+  moveAccount(db, 1, 'down')
+  moveAccount(db, 1, 'down')
+  assert.deepStrictEqual(order(db), [2, 3, 1])
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

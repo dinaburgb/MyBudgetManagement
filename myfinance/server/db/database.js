@@ -58,6 +58,14 @@ function runSchemaMigrations(db) {
     console.log('Migration: added transactions.is_transfer')
   }
 
+  if (!hasColumn('accounts', 'sort_order')) {
+    db.exec(`ALTER TABLE accounts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
+    // Give existing accounts a stable initial order (by id) so the up/down
+    // controls have something deterministic to rearrange.
+    db.exec(`UPDATE accounts SET sort_order = id`)
+    console.log('Migration: added accounts.sort_order')
+  }
+
   if (!hasColumn('categories', 'is_excluded')) {
     db.exec(`ALTER TABLE categories ADD COLUMN is_excluded INTEGER NOT NULL DEFAULT 0`)
     // A credit-card repayment debit is not a real expense (the card's own charges

@@ -41,7 +41,12 @@ export default function TxnRow({ txn, showAccount = true, onChanged }) {
             </span>
           )}
           {showAccount && txn.account_name && (
-            <span className="text-gray-600 text-[11px]">{txn.account_name}</span>
+            <span className="text-gray-600 text-[11px]">
+              {txn.account_name}
+              {txn.account_number && (
+                <> · {txn.account_label ? `${txn.account_label} (${txn.account_number})` : txn.account_number}</>
+              )}
+            </span>
           )}
         </div>
         <div className="mt-1">

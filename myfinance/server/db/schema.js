@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   last_scraped TEXT,                   -- ISO timestamp of last successful scrape
   enabled      INTEGER NOT NULL DEFAULT 1,
   include_in_totals INTEGER NOT NULL DEFAULT 1,  -- 0 = exclude from summaries/totals
+  sort_order   INTEGER NOT NULL DEFAULT 0,       -- manual display order (lower = higher up)
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -116,6 +117,18 @@ CREATE TABLE IF NOT EXISTS excluded_subaccounts (
   account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   account_number TEXT NOT NULL,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, account_number)
+);
+
+-- Optional user-given nicknames for sub-accounts (one account number under a
+-- login, e.g. a specific credit card). Absence = no nickname; the number alone
+-- is shown. Used to label cards like 8805 → "יומיומי" in the transactions source.
+CREATE TABLE IF NOT EXISTS subaccount_labels (
+  account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  label          TEXT NOT NULL DEFAULT '',
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (account_id, account_number)
 );
 

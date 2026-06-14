@@ -162,7 +162,7 @@ router.get('/overview', (req, res) => {
         AND category IN (${iP})
       GROUP BY category
       HAVING income > 0
-    `).all(...params, ...incomeCats)
+    `).all(...months, ...accountIds, ...incomeCats)
   }
 
   // The pie shows expenses only — income categories are kept out of it.
@@ -197,8 +197,11 @@ router.get('/transactions', (req, res) => {
   const mP = months.map(() => '?').join(',')
   const aP = accountIds.map(() => '?').join(',')
   const rows = db.prepare(`
-    SELECT id, date, description, amount, category, account_name, source,
-           type, installment_number, installment_total, note
+    SELECT id, date, description, amount, category, account_number, account_name, source,
+           type, installment_number, installment_total, note,
+           (SELECT label FROM subaccount_labels sl
+              WHERE sl.account_id = transactions.account_id
+                AND sl.account_number = transactions.account_number) AS account_label
     FROM transactions
     WHERE category = ?
       AND substr(date, 1, 7) IN (${mP})
