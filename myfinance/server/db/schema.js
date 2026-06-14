@@ -148,13 +148,16 @@ CREATE TABLE IF NOT EXISTS ignored_transfer_pairs (
 -- a snapshot in asset_snapshots, so growth over time is kept.
 CREATE TABLE IF NOT EXISTS financial_assets (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  institution  TEXT NOT NULL,            -- e.g. 'כלל ביטוח', 'הראל', 'אינטראקטיב ברוקרס'
-  asset_type   TEXT NOT NULL,            -- savings type, e.g. 'קרן פנסיה', 'קופת גמל', 'קרן השתלמות', 'תיק השקעות'
+  kind         TEXT NOT NULL DEFAULT 'asset',  -- 'asset' = holding, 'liability' = a debt/loan (subtracted in net total)
+  category     TEXT DEFAULT '',          -- high-level grouping, e.g. 'נדל״ן', 'שוק ההון', 'הלוואות חברתיות', 'קרן ביטחון'
+  institution  TEXT NOT NULL,            -- e.g. 'כלל ביטוח', 'הראל', 'אינטראקטיב ברוקרס', 'בנק מזרחי'
+  asset_type   TEXT NOT NULL,            -- savings type, e.g. 'קרן פנסיה', 'קופת גמל', 'קרן השתלמות', 'תיק השקעות', 'הלוואה'
   label        TEXT DEFAULT '',          -- optional free-text name / policy number
   owner        TEXT NOT NULL DEFAULT 'Boris',  -- Boris / Irena / Joint
   currency     TEXT NOT NULL DEFAULT 'ILS',
   note         TEXT DEFAULT '',
   archived     INTEGER NOT NULL DEFAULT 0,  -- 1 = closed/sold, kept for history, out of totals
+  sort_order   INTEGER NOT NULL DEFAULT 0,  -- manual display order within its kind (lower = higher up)
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );

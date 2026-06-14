@@ -4,7 +4,8 @@
  *
  *   GET    /api/assets                      list assets (+ latest snapshot)
  *   GET    /api/assets/summary              totals + breakdowns
- *   POST   /api/assets                      create an asset
+ *   POST   /api/assets                      create an asset (or liability)
+ *   PUT    /api/assets/:id/move             reorder one step (up/down)
  *   PUT    /api/assets/:id                  update an asset
  *   DELETE /api/assets/:id                  delete an asset (+ its snapshots)
  *   GET    /api/assets/:id/snapshots        history for one asset
@@ -16,7 +17,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import {
-  listAssets, createAsset, updateAsset, deleteAsset,
+  listAssets, createAsset, updateAsset, deleteAsset, moveAsset,
   upsertSnapshot, listSnapshots, deleteSnapshot, assetsSummary,
 } from '../db/assets.js'
 
@@ -40,24 +41,31 @@ router.get('/summary', (req, res) => {
   res.json(assetsSummary(getDb()))
 })
 
-/** POST /api/assets — create an asset. */
+/** POST /api/assets — create an asset (or liability). */
 router.post('/', (req, res) => {
-  const { institution, asset_type, label, owner, currency, note } = req.body || {}
+  const { kind, category, institution, asset_type, label, owner, currency, note } = req.body || {}
   if (!institution || !asset_type) {
     return res.status(400).json({ error: 'institution and asset_type are required' })
   }
-  const id = createAsset(getDb(), { institution, asset_type, label, owner, currency, note })
+  const id = createAsset(getDb(), { kind, category, institution, asset_type, label, owner, currency, note })
   res.json({ id, message: 'Asset created' })
+})
+
+/** PUT /api/assets/:id/move — reorder one step { direction: 'up' | 'down' } */
+router.put('/:id/move', (req, res) => {
+  const direction = req.body?.direction === 'up' ? 'up' : 'down'
+  const moved = moveAsset(getDb(), Number(req.params.id), direction)
+  res.json({ message: moved ? 'Asset moved' : 'Already at edge', moved })
 })
 
 /** PUT /api/assets/:id — update an asset. */
 router.put('/:id', (req, res) => {
   const id = Number(req.params.id)
-  const { institution, asset_type, label, owner, currency, note, archived } = req.body || {}
+  const { kind, category, institution, asset_type, label, owner, currency, note, archived } = req.body || {}
   if (!institution || !asset_type) {
     return res.status(400).json({ error: 'institution and asset_type are required' })
   }
-  updateAsset(getDb(), id, { institution, asset_type, label, owner, currency, note, archived })
+  updateAsset(getDb(), id, { kind, category, institution, asset_type, label, owner, currency, note, archived })
   res.json({ message: 'Asset updated' })
 })
 

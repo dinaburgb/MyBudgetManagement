@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import {
-  listAssets, createAsset, updateAsset, deleteAsset,
+  listAssets, createAsset, updateAsset, deleteAsset, moveAsset,
   upsertSnapshot, listSnapshots, deleteSnapshot, assetsSummary,
 } from '../server/db/assets.js'
 
@@ -103,6 +103,56 @@ test('deleteSnapshot removes a single update', () => {
   const snaps = listSnapshots(db, id)
   deleteSnapshot(db, snaps[0].id)
   assert.strictEqual(listSnapshots(db, id).length, 1)
+})
+
+test('liabilities are subtracted: gross/net summary', () => {
+  const db = freshDb()
+  const a = createAsset(db, { kind: 'asset', category: 'שוק ההון', institution: 'מור', asset_type: 'תיק השקעות' })
+  const l = createAsset(db, { kind: 'liability', category: 'הלוואות', institution: 'בנק מזרחי', asset_type: 'הלוואת בנק' })
+  upsertSnapshot(db, a, { snapshot_date: '2026-06-01', balance: 300000 })
+  upsertSnapshot(db, l, { snapshot_date: '2026-06-01', balance: 50000 })
+  const s = assetsSummary(db)
+  assert.strictEqual(s.gross, 300000)            // assets only
+  assert.strictEqual(s.totalLiabilities, 50000)
+  assert.strictEqual(s.net, 250000)              // gross − liabilities
+  assert.strictEqual(s.assetCount, 1)
+  assert.strictEqual(s.liabilityCount, 1)
+  assert.strictEqual(s.byType.length, 1)         // breakdowns are assets-only
+})
+
+test('summary breaks down assets by category', () => {
+  const db = freshDb()
+  const re = createAsset(db, { kind: 'asset', category: 'נדל״ן', institution: 'דירה', asset_type: 'נדל״ן' })
+  const st = createAsset(db, { kind: 'asset', category: 'שוק ההון', institution: 'מור', asset_type: 'תיק השקעות' })
+  upsertSnapshot(db, re, { snapshot_date: '2026-06-01', balance: 1000000 })
+  upsertSnapshot(db, st, { snapshot_date: '2026-06-01', balance: 200000 })
+  const s = assetsSummary(db)
+  assert.strictEqual(s.byCategory.length, 2)
+  assert.strictEqual(s.byCategory[0].key, 'נדל״ן')      // sorted desc by total
+  assert.strictEqual(s.byCategory[0].total, 1000000)
+})
+
+test('moveAsset swaps order within the same kind only', () => {
+  const db = freshDb()
+  const a1 = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה' })
+  const a2 = createAsset(db, { institution: 'מיטב', asset_type: 'קרן השתלמות' })
+  const l1 = createAsset(db, { kind: 'liability', institution: 'בנק מזרחי', asset_type: 'הלוואת בנק' })
+  // initial order is creation order
+  assert.deepStrictEqual(listAssets(db).filter(a => a.kind === 'asset').map(a => a.id), [a1, a2])
+  // move the second asset up — swaps with the first
+  assert.strictEqual(moveAsset(db, a2, 'up'), true)
+  assert.deepStrictEqual(listAssets(db).filter(a => a.kind === 'asset').map(a => a.id), [a2, a1])
+  // the lone liability can't move (no same-kind neighbour)
+  assert.strictEqual(moveAsset(db, l1, 'up'), false)
+  assert.strictEqual(moveAsset(db, l1, 'down'), false)
+})
+
+test('moveAsset returns false at the edges', () => {
+  const db = freshDb()
+  const a1 = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה' })
+  const a2 = createAsset(db, { institution: 'מיטב', asset_type: 'קרן השתלמות' })
+  assert.strictEqual(moveAsset(db, a1, 'up'), false)    // already top
+  assert.strictEqual(moveAsset(db, a2, 'down'), false)  // already bottom
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

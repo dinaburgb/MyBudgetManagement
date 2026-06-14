@@ -241,6 +241,20 @@ Status of each bank / card integration:
     delete. Institution & type dropdowns have a free-text "אחר…" fallback.
   - Tests: `tests/test_assets.js` (7). Full suite: 13 files passing.
   - NOTE: archived asset = closed/sold; kept for history, out of all totals.
+- **Assets: categories, liabilities, reordering, net worth (2026-06-14):**
+  - Added 3 columns to `financial_assets` (migrations in `database.js`):
+    `kind` ('asset'/'liability'), `category` (קטגוריה: נדל״ן/שוק ההון/הלוואות
+    חברתיות/קרן ביטחון/חיסכון פנסיוני/מזומן), `sort_order` (manual order).
+  - `kind='liability'` rows (e.g. הלוואת בנק ממזרחי) reuse the same snapshot
+    mechanism for manual balance updates, shown in a separate "התחייבויות" section.
+  - `assetsSummary` now returns `gross` (sum of assets), `totalLiabilities`,
+    `net` (gross − liabilities), `byCategory`, plus asset/liability counts.
+    Breakdowns are assets-only. `total` kept = `gross` for back-compat.
+  - `moveAsset(db, id, direction)` swaps `sort_order` with the same-kind neighbour
+    (assets & liabilities ordered independently); route `PUT /api/assets/:id/move`.
+  - UI: up/down arrows per row, ברוטו/התחייבויות/נטו summary cards, by-category +
+    by-type breakdown cards, category badge, liabilities shown in red with a minus.
+  - Tests: `tests/test_assets.js` now 11 (added liability net, by-category, move).
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

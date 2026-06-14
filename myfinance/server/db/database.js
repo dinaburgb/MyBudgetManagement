@@ -73,6 +73,24 @@ function runSchemaMigrations(db) {
     db.exec(`UPDATE categories SET is_excluded = 1 WHERE name = 'הורדת כרטיס אשראי'`)
     console.log('Migration: added categories.is_excluded')
   }
+
+  if (!hasColumn('financial_assets', 'kind')) {
+    db.exec(`ALTER TABLE financial_assets ADD COLUMN kind TEXT NOT NULL DEFAULT 'asset'`)
+    console.log('Migration: added financial_assets.kind')
+  }
+
+  if (!hasColumn('financial_assets', 'category')) {
+    db.exec(`ALTER TABLE financial_assets ADD COLUMN category TEXT DEFAULT ''`)
+    console.log('Migration: added financial_assets.category')
+  }
+
+  if (!hasColumn('financial_assets', 'sort_order')) {
+    db.exec(`ALTER TABLE financial_assets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
+    // Give existing assets a stable initial order (by id) so the up/down controls
+    // have something deterministic to rearrange.
+    db.exec(`UPDATE financial_assets SET sort_order = id`)
+    console.log('Migration: added financial_assets.sort_order')
+  }
 }
 
 /** Get the active database connection. Throws if not yet opened. */
