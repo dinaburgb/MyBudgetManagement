@@ -100,7 +100,7 @@ router.get('/overview', (req, res) => {
   if (accountIds.length === 0) {
     return res.json({
       months, monthly: months.map(month => ({ month, expenses: 0, income: 0 })),
-      byCategory: [], totals: { expenses: 0, income: 0, balance: 0 }, netBalance: 0,
+      byCategory: [], incomeByCategory: [], totals: { expenses: 0, income: 0, balance: 0 }, netBalance: 0,
       budgetTable: buildBudgetTable(db, months, [], [], incomeSet, excludedSet),
     })
   }
@@ -176,7 +176,7 @@ router.get('/overview', (req, res) => {
   totals.balance = totals.income - totals.expenses
 
   res.json({
-    months, monthly, byCategory, totals,
+    months, monthly, byCategory, incomeByCategory, totals,
     netBalance: netBalance(db, accountIds),
     budgetTable: buildBudgetTable(db, months, expenseByCategory, incomeByCategory, incomeSet, excludedSet),
   })
