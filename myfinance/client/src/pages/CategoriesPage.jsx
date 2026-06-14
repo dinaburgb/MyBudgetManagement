@@ -328,7 +328,7 @@ export default function CategoriesPage() {
         {rules.length === 0 ? (
           <p className="text-gray-500 text-sm">אין עדיין כללים. הוסף אחד למעלה.</p>
         ) : (
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto pl-3">
             <table className="w-full text-sm">
               <tbody>
                 {rules.map(r => (

@@ -294,38 +294,68 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* Income by category — its own pie, separate from expenses */}
-          {incomePie.length > 0 && (
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
-              <div className="bg-gray-900 rounded-xl p-5">
-                <h3 className="text-white font-medium mb-1">הכנסות לפי קטגוריה</h3>
-                <p className="text-xs text-gray-500 mb-3">לחץ על פלח כדי לראות את התנועות</p>
-                <ResponsiveContainer width="100%" height={260}>
-                  <PieChart>
-                    <Pie data={incomePie} dataKey="value" nameKey="name" cx="50%" cy="50%"
-                         innerRadius={58} outerRadius={95} paddingAngle={2}
-                         cursor="pointer" onClick={d => openDrill(d?.name)}>
-                      {incomePie.map(entry => <Cell key={entry.name} fill={colorFor(entry.name)} stroke="#111827" />)}
-                    </Pie>
-                    <Tooltip content={<ChartTooltip />} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex items-center justify-between border-t border-gray-800 mt-2 pt-3 text-sm">
-                  <span className="text-gray-400">סה"כ הכנסות</span>
-                  <span className="font-mono text-emerald-400">{ils(incomePieTotal)}</span>
+          {/* Income by category + the category drill-down. Clicking any pie slice
+              opens that category's transactions here — in the column next to the
+              income pie — so the charges appear right by the charts instead of at
+              the bottom of the page. */}
+          {(incomePie.length > 0 || drill) && (
+            <div className="mt-6 grid gap-6 lg:grid-cols-2 items-start">
+              {incomePie.length > 0 && (
+                <div className="bg-gray-900 rounded-xl p-5">
+                  <h3 className="text-white font-medium mb-1">הכנסות לפי קטגוריה</h3>
+                  <p className="text-xs text-gray-500 mb-3">לחץ על פלח כדי לראות את התנועות</p>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <PieChart>
+                      <Pie data={incomePie} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                           innerRadius={58} outerRadius={95} paddingAngle={2}
+                           cursor="pointer" onClick={d => openDrill(d?.name)}>
+                        {incomePie.map(entry => <Cell key={entry.name} fill={colorFor(entry.name)} stroke="#111827" />)}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex items-center justify-between border-t border-gray-800 mt-2 pt-3 text-sm">
+                    <span className="text-gray-400">סה"כ הכנסות</span>
+                    <span className="font-mono text-emerald-400">{ils(incomePieTotal)}</span>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Drill-down: transactions for the clicked category */}
+              {drill && (
+                <div className="bg-gray-900 rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-white font-medium flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
+                      חיובים בקטגוריה: {drill.category}
+                      <span className="text-gray-500 text-sm">({drill.rows.length})</span>
+                    </h3>
+                    <button onClick={() => setDrill(null)} className="text-gray-400 hover:text-white text-sm">סגור ✕</button>
+                  </div>
+                  {drillLoading ? (
+                    <div className="text-gray-400 text-sm">טוען...</div>
+                  ) : drill.rows.length === 0 ? (
+                    <div className="text-gray-500 text-sm">אין חיובים בקטגוריה זו לבחירה הנוכחית.</div>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto pl-3">
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {drill.rows.map(r => (
+                            <TxnRow key={r.id} txn={r} onChanged={onTxnChanged} />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Budget table and drill-down — side by side when both are shown */}
-          {(data.budgetTable?.length > 0 || drill) && (
-          <div className={`mt-6 grid gap-6 items-start ${data.budgetTable?.length > 0 && drill ? 'lg:grid-cols-2' : 'max-w-2xl'}`}>
-
           {/* Budget vs. actual table for the selected period */}
           {data.budgetTable?.length > 0 && (
-            <div className="bg-gray-900 rounded-xl p-5">
+            <div className="mt-6 max-w-2xl bg-gray-900 rounded-xl p-5">
               <h3 className="text-white font-medium mb-1">תקציב מול ביצוע</h3>
               <p className="text-xs text-gray-500 mb-3">
                 סכום על פני {selMonths.size} חודשים שנבחרו. תא ריק = לא הוגדר תקציב.
@@ -373,38 +403,6 @@ export default function OverviewPage() {
                 </tfoot>
               </table>
             </div>
-          )}
-
-          {/* Drill-down: transactions for the clicked category */}
-          {drill && (
-            <div className="bg-gray-900 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-white font-medium flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full" style={{ background: colorFor(drill.category) }} />
-                  חיובים בקטגוריה: {drill.category}
-                  <span className="text-gray-500 text-sm">({drill.rows.length})</span>
-                </h3>
-                <button onClick={() => setDrill(null)} className="text-gray-400 hover:text-white text-sm">סגור ✕</button>
-              </div>
-              {drillLoading ? (
-                <div className="text-gray-400 text-sm">טוען...</div>
-              ) : drill.rows.length === 0 ? (
-                <div className="text-gray-500 text-sm">אין חיובים בקטגוריה זו לבחירה הנוכחית.</div>
-              ) : (
-                <div className="max-h-96 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <tbody>
-                      {drill.rows.map(r => (
-                        <TxnRow key={r.id} txn={r} onChanged={onTxnChanged} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          </div>
           )}
         </>
       )}

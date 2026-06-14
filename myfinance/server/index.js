@@ -13,6 +13,8 @@ import express from 'express'
 import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 import cors from 'cors'
+import fs from 'node:fs'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -203,6 +205,42 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(CLIENT_DIST, 'index.html'))
 })
 
+/**
+ * Open the app in a dedicated Chrome/Edge "app" window (no tabs/address bar).
+ * Such a window has a single history entry, so the in-app close button's
+ * window.close() is allowed to close it — unlike a manually-opened tab, which
+ * browsers refuse to close. Falls back to the default browser (a normal tab that
+ * the user closes themselves). Set NO_OPEN=1 to skip (e.g. during development).
+ */
+function openAppWindow(url) {
+  if (process.env.NO_OPEN === '1') return
+  if (process.platform !== 'win32') {
+    // macOS/Linux: just open in the default browser (app-mode varies by install).
+    try {
+      const cmd = process.platform === 'darwin' ? 'open' : 'xdg-open'
+      spawn(cmd, [url], { detached: true, stdio: 'ignore' }).unref()
+    } catch { /* ignore */ }
+    return
+  }
+  // Windows: prefer a Chrome/Edge app window (closable via window.close()).
+  const candidates = [
+    `${process.env['ProgramFiles']}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${process.env['ProgramFiles(x86)']}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${process.env['LocalAppData']}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${process.env['ProgramFiles(x86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${process.env['ProgramFiles']}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  ]
+  const exe = candidates.find(p => p && fs.existsSync(p))
+  try {
+    if (exe) {
+      spawn(exe, [`--app=${url}`], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      // No Chrome/Edge found — open the default browser as a normal tab.
+      spawn('cmd', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref()
+    }
+  } catch { /* ignore — the URL is printed below anyway */ }
+}
+
 // --- WebSocket: broadcast OTP requests to connected browsers (Phase 3) ---
 export function broadcastOtpRequest(accountName) {
   wss.clients.forEach(client => {
@@ -218,6 +256,9 @@ const PORT = 3000
 // machine, never from other devices on the local network/Wi-Fi.
 const HOST = '127.0.0.1'
 server.listen(PORT, HOST, () => {
-  console.log(`\n✅ MyFinance is running at http://localhost:${PORT}`)
-  console.log(`   Open your browser and go to: http://localhost:${PORT}\n`)
+  const url = `http://localhost:${PORT}`
+  console.log(`\n✅ MyFinance is running at ${url}`)
+  console.log(`   Opening a dedicated app window... (or browse to ${url})\n`)
+  // Open the app in its own window so the in-app "close" button can shut it.
+  openAppWindow(url)
 })

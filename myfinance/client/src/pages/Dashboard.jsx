@@ -34,6 +34,10 @@ export default function Dashboard({ onLock }) {
     if (!confirm('לסגור את התוכנה? השרת ייעצר ותצטרך להפעיל אותו מחדש כדי להיכנס.')) return
     setClosed(true)
     await axios.post('/api/app/shutdown').catch(() => {})  // server exits; request may not resolve
+    // Try to close the window itself. Works when the app was launched in its own
+    // Chrome/Edge app window (the default launch); a manually-opened tab can't be
+    // closed by script, so the end screen below stays as a fallback.
+    setTimeout(() => { try { window.open('', '_self'); window.close() } catch { /* ignore */ } }, 300)
   }
 
   // After shutdown the server is gone — show a friendly end screen.

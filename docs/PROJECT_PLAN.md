@@ -255,6 +255,42 @@ Status of each bank / card integration:
   - UI: up/down arrows per row, ברוטו/התחייבויות/נטו summary cards, by-category +
     by-type breakdown cards, category badge, liabilities shown in red with a minus.
   - Tests: `tests/test_assets.js` now 11 (added liability net, by-category, move).
+- **Budgets rework: donut tiles, start date, carryover, income (2026-06-14):**
+  - Budgets page redesigned from wide rows into a compact donut-tile grid
+    (`client/src/pages/BudgetsPage.jsx`): center shows spent (big) + monthly
+    remaining/חריגה (small); below: monthly limit + accumulated balance. Clicking a
+    tile opens a modal editor (amount, scope, suggestion, transactions drill-down).
+  - Budget start date: new `budgets.effective_from` ('YYYY-MM', '' = legacy/always;
+    migration in `database.js`). The recurring default applies only from that month
+    onward. Editor lets you pick the start month ("תקציב קבוע — חל מהחודש").
+  - Accumulated envelope balance ("מצטבר", +/−): `budgetEnvelope` sums
+    (limit − spent) over every month from a category's start through the selected
+    month — both under- and over-spend carry forward. Returned per row as
+    `carryover` from `computeBudgetOverview`.
+  - Category reordering: `moveCategory(db, id, direction)` swaps `sort_order` with
+    the same-section neighbour (income vs expense kept independent); route
+    `PUT /api/categories/:id/move`. Up/down arrows on every tile.
+  - Income split out: `computeIncomeOverview` returns income-flagged categories with
+    an expected-income target (their "budget") vs actual earned. They no longer sit
+    among expense tiles. New balance plaque (income / expenses / מאזן, בתקציב vs
+    בפועל) + a separate "הכנסות" tile section. Overview route returns `incomeRows`.
+  - Tests: `tests/test_budgets.js` now 15 (carryover, effective_from, income split);
+    `tests/test_categories_store.js` now 11 (moveCategory).
+- **One-click close: app window + terminal (2026-06-14):**
+  - Server opens the app in a dedicated Chrome/Edge `--app` window on startup
+    (`openAppWindow` in `server/index.js`; Windows-first, falls back to default
+    browser; `NO_OPEN=1` skips it). An app window has a single history entry, so
+    the in-app close button's `window.close()` is allowed to shut it.
+  - "סגירת התוכנה" now also calls `window.close()` after `/api/app/shutdown`
+    (Dashboard.jsx); the end screen stays as a fallback for manually-opened tabs.
+  - `myfinance/MyBudget.bat` launcher: double-click to start; when the server
+    exits (close button), the process ends and the cmd window closes itself.
+- **Budgets: monthly summary table (2026-06-14):**
+  - Bottom-of-page roll-up: planned vs actual income/expenses + balance (מאזן)
+    for every month that has transaction data, with a grand-total row.
+    `monthlyBudgetSummary` in `db/budgets.js`, `GET /api/budgets/monthly-summary`,
+    `MonthlySummaryTable` in `BudgetsPage.jsx` (actual on top, budget muted below).
+  - Tests: `tests/test_budgets.js` now 16 (monthly roll-up).
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

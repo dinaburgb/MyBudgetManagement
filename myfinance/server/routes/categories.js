@@ -13,7 +13,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { recategorizeAll, applyRuleToUncategorized, applyKeywordToAll, AUTHORITATIVE_PRIORITY } from '../db/categorize.js'
-import { listCategories, addCategory, updateCategory, deleteCategory } from '../db/categories.js'
+import { listCategories, addCategory, updateCategory, deleteCategory, moveCategory } from '../db/categories.js'
 import { notExcludedSql } from '../db/subaccounts.js'
 
 const router = Router()
@@ -68,6 +68,13 @@ router.delete('/:id', (req, res) => {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: 'Category not found' })
     res.status(500).json({ error: 'Could not delete category' })
   }
+})
+
+/** PUT /api/categories/:id/move — reorder one step { direction: 'up' | 'down' } */
+router.put('/:id/move', (req, res) => {
+  const direction = req.body?.direction === 'up' ? 'up' : 'down'
+  const moved = moveCategory(getDb(), Number(req.params.id), direction)
+  res.json({ message: moved ? 'Category moved' : 'Already at edge', moved })
 })
 
 /** GET /api/categories/rules — all rules, highest priority first */

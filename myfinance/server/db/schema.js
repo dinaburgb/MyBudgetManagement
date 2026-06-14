@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   category   TEXT NOT NULL,
   month      TEXT NOT NULL DEFAULT '',  -- '' = recurring default, else 'YYYY-MM'
   amount     REAL NOT NULL,             -- positive monthly limit in ILS
+  effective_from TEXT NOT NULL DEFAULT '', -- 'YYYY-MM' the recurring default starts applying ('' = all months / legacy)
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(category, month)

@@ -74,6 +74,11 @@ function runSchemaMigrations(db) {
     console.log('Migration: added categories.is_excluded')
   }
 
+  if (!hasColumn('budgets', 'effective_from')) {
+    db.exec(`ALTER TABLE budgets ADD COLUMN effective_from TEXT NOT NULL DEFAULT ''`)
+    console.log('Migration: added budgets.effective_from')
+  }
+
   if (!hasColumn('financial_assets', 'kind')) {
     db.exec(`ALTER TABLE financial_assets ADD COLUMN kind TEXT NOT NULL DEFAULT 'asset'`)
     console.log('Migration: added financial_assets.kind')
