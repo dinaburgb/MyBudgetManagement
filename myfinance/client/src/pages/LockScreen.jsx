@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Lock, Eye, EyeOff, KeyRound, RotateCcw, ArrowRight } from 'lucide-react'
 import axios from 'axios'
-import { DISCLAIMER_FULL } from '../legal.js'
+import { DISCLAIMER_FULL, DISCLAIMER_TITLE } from '../legal.js'
 
 const ACCEPT_KEY = 'mbm_disclaimer_accepted'
 
@@ -121,7 +121,8 @@ export default function LockScreen({ onUnlocked }) {
 
               {/* Disclaimer with required acceptance checkbox */}
               <div className="mt-4 mb-3 bg-gray-800/60 border border-gray-700 rounded-lg p-3">
-                <div className="text-gray-300 text-xs leading-relaxed max-h-32 overflow-y-auto">{DISCLAIMER_FULL}</div>
+                <div className="text-white text-sm font-semibold mb-2">{DISCLAIMER_TITLE}</div>
+                <div className="text-gray-300 text-xs leading-relaxed max-h-40 overflow-y-auto whitespace-pre-line">{DISCLAIMER_FULL}</div>
                 <label className="flex items-start gap-2 mt-3 text-sm text-gray-200 cursor-pointer select-none">
                   <input type="checkbox" checked={accepted} onChange={e => acceptToggle(e.target.checked)} className="w-4 h-4 mt-0.5 accent-blue-600" />
                   קראתי ואני מאשר/ת שהשימוש בתוכנה הוא על אחריותי בלבד וללא כל אחריות מצד המפתח.

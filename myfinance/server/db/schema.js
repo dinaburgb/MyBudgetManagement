@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   type                TEXT DEFAULT 'normal',        -- normal / installment
   installment_number  INTEGER,
   installment_total   INTEGER,
+  is_transfer         INTEGER NOT NULL DEFAULT 0,   -- 1 = internal transfer between own accounts (ignored in totals)
   status              TEXT DEFAULT 'completed',     -- completed / pending
   created_at          TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
@@ -116,6 +117,15 @@ CREATE TABLE IF NOT EXISTS excluded_subaccounts (
   account_number TEXT NOT NULL,
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (account_id, account_number)
+);
+
+-- Transfer pairs the user reviewed and said are NOT internal transfers, so the
+-- pair suggester won't nag about them again. Ids are normalised low < high.
+CREATE TABLE IF NOT EXISTS ignored_transfer_pairs (
+  low_id     INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  high_id    INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (low_id, high_id)
 );
 
 -- Activity log — NO sensitive data, only operational events

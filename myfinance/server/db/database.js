@@ -53,6 +53,11 @@ function runSchemaMigrations(db) {
     console.log('Migration: added categories.is_income')
   }
 
+  if (!hasColumn('transactions', 'is_transfer')) {
+    db.exec(`ALTER TABLE transactions ADD COLUMN is_transfer INTEGER NOT NULL DEFAULT 0`)
+    console.log('Migration: added transactions.is_transfer')
+  }
+
   if (!hasColumn('categories', 'is_excluded')) {
     db.exec(`ALTER TABLE categories ADD COLUMN is_excluded INTEGER NOT NULL DEFAULT 0`)
     // A credit-card repayment debit is not a real expense (the card's own charges

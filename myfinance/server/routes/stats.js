@@ -121,6 +121,7 @@ router.get('/overview', (req, res) => {
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
       AND ${NOT_EXCLUDED}
+      AND is_transfer = 0
       ${catClause}
     GROUP BY month
   `).all(...params)
@@ -139,6 +140,7 @@ router.get('/overview', (req, res) => {
     WHERE substr(date, 1, 7) IN (${mPlaceholders})
       AND account_id IN (${aPlaceholders})
       AND ${NOT_EXCLUDED}
+      AND is_transfer = 0
       ${catClause}
     GROUP BY category
     HAVING expenses > 0
@@ -156,6 +158,7 @@ router.get('/overview', (req, res) => {
       WHERE substr(date, 1, 7) IN (${mPlaceholders})
         AND account_id IN (${aPlaceholders})
         AND ${NOT_EXCLUDED}
+        AND is_transfer = 0
         AND category IN (${iP})
       GROUP BY category
       HAVING income > 0
@@ -201,6 +204,7 @@ router.get('/transactions', (req, res) => {
       AND substr(date, 1, 7) IN (${mP})
       AND account_id IN (${aP})
       AND ${NOT_EXCLUDED}
+      AND is_transfer = 0
     ORDER BY date DESC, id DESC
   `).all(category, ...months, ...accountIds)
   res.json({ category, rows })

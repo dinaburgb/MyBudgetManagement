@@ -139,6 +139,7 @@ router.get('/summary', (req, res) => {
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
       AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.is_transfer = 0
       AND t.category NOT IN (SELECT name FROM categories WHERE is_excluded = 1)
     GROUP BY t.category
     ORDER BY expenses ASC

@@ -25,6 +25,7 @@ import scrapeRouter from './routes/scrape.js'
 import categoriesRouter from './routes/categories.js'
 import budgetsRouter from './routes/budgets.js'
 import statsRouter from './routes/stats.js'
+import transfersRouter from './routes/transfers.js'
 import { seedDefaultRules, migrateCategoriesToHebrew, ensureEssentialRules } from './db/categorize.js'
 import { seedCategories, migrateFuelToVehicle } from './db/categories.js'
 
@@ -193,6 +194,7 @@ app.use('/api/scrape',       scrapeRouter)
 app.use('/api/categories',   categoriesRouter)
 app.use('/api/budgets',      budgetsRouter)
 app.use('/api/stats',        statsRouter)
+app.use('/api/transfers',    transfersRouter)
 
 // --- Fallback: serve React for all non-API routes ---
 app.get('*', (req, res) => {

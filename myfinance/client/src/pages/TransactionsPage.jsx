@@ -6,6 +6,7 @@ import NoteEditor from '../NoteEditor.jsx'
 import ApplyRulePrompt from '../ApplyRulePrompt.jsx'
 import MultiSelect from '../MultiSelect.jsx'
 import ManualTxnForm from '../ManualTxnForm.jsx'
+import TransfersReview from '../TransfersReview.jsx'
 
 const SOURCE_LABELS = {
   hapoalim: 'הפועלים', discount: 'דיסקונט', fibi: 'הבינלאומי', mizrahi: 'מזרחי',
@@ -70,6 +71,11 @@ export default function TransactionsPage() {
     setRows(prev => prev.map(r => r.id === id ? { ...r, note } : r))
   }
 
+  async function unmarkTransfer(id) {
+    await axios.post('/api/transfers/unmark', { id })
+    setRows(prev => prev.map(r => r.id === id ? { ...r, is_transfer: 0 } : r))
+  }
+
   function setFilter(key, value) {
     setFilters(prev => ({ ...prev, [key]: value }))
   }
@@ -109,6 +115,9 @@ export default function TransactionsPage() {
           onClose={() => setShowAdd(false)}
         />
       )}
+
+      {/* Suggested internal-transfer pairs to review */}
+      <TransfersReview onChange={() => load(1)} />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
@@ -199,6 +208,12 @@ export default function TransactionsPage() {
                       {r.type === 'installment' && r.installment_total > 1 && (
                         <span className="inline-block mt-0.5 text-xs text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5">
                           תשלום {r.installment_number} מתוך {r.installment_total}
+                        </span>
+                      )}
+                      {r.is_transfer === 1 && (
+                        <span className="inline-flex items-center gap-1 mt-0.5 text-xs text-blue-300 bg-blue-500/10 rounded px-1.5 py-0.5">
+                          העברה פנימית
+                          <button onClick={() => unmarkTransfer(r.id)} className="text-gray-400 hover:text-white" title="בטל סימון">✕</button>
                         </span>
                       )}
                     </td>
