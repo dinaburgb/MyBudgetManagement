@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 
@@ -287,6 +287,38 @@ export default function AccountsPage() {
     load()  // refresh login-level balance / excluded badge
   }
 
+  // Sub-account nickname: type updates locally, save on blur (no totals impact).
+  function setSubLabelLocal(accId, number, label) {
+    setSubData(prev => ({
+      ...prev,
+      [accId]: prev[accId].map(s => s.account_number === number ? { ...s, label } : s),
+    }))
+  }
+  async function saveSubLabel(accId, number, label) {
+    try {
+      await axios.put(`/api/accounts/${accId}/subaccounts`, { account_number: number, label })
+    } catch {
+      loadSubs(accId)
+    }
+  }
+
+  // Reorder an account one step up/down. Optimistically swap locally, then persist.
+  async function moveAccount(id, direction) {
+    setAccounts(prev => {
+      const i = prev.findIndex(a => a.id === id)
+      const j = direction === 'up' ? i - 1 : i + 1
+      if (i < 0 || j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+    try {
+      await axios.put(`/api/accounts/${id}/move`, { direction })
+    } catch {
+      load()  // re-sync on failure
+    }
+  }
+
   // Toggle whether this account is included in totals/summaries
   async function toggleInTotals(acc) {
     const next = acc.include_in_totals ? 0 : 1
@@ -381,13 +413,32 @@ export default function AccountsPage() {
         </div>
 
         <div className="space-y-3">
-          {accounts.map(acc => (
+          {accounts.map((acc, idx) => (
             <div
               key={acc.id}
               className="bg-gray-900 rounded-xl p-4"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-start gap-3">
+                  {/* Up/down reorder controls */}
+                  <div className="flex flex-col -my-1">
+                    <button
+                      onClick={() => moveAccount(acc.id, 'up')}
+                      disabled={idx === 0}
+                      title="הזז למעלה"
+                      className="text-gray-500 hover:text-white disabled:opacity-20 disabled:hover:text-gray-500 transition-colors"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => moveAccount(acc.id, 'down')}
+                      disabled={idx === accounts.length - 1}
+                      title="הזז למטה"
+                      className="text-gray-500 hover:text-white disabled:opacity-20 disabled:hover:text-gray-500 transition-colors"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+                  </div>
                   <input
                     type="checkbox"
                     checked={selectedIds.has(acc.id)}
@@ -456,8 +507,9 @@ export default function AccountsPage() {
                 )}
               </label>
 
-              {/* Sub-accounts: only when this login exposes more than one number */}
-              {acc.subaccount_count > 1 && (
+              {/* Sub-accounts: shown whenever this login has at least one account
+                  number, so a single card/account can still be nicknamed. */}
+              {acc.subaccount_count >= 1 && (
                 <div className="mt-3">
                   <button
                     onClick={() => toggleSubOpen(acc.id)}
@@ -466,7 +518,9 @@ export default function AccountsPage() {
                     {subOpen.has(acc.id)
                       ? <ChevronDown className="w-4 h-4 text-gray-500" />
                       : <ChevronLeft className="w-4 h-4 text-gray-500" />}
-                    {isCard(acc.source) ? 'פירוט כרטיסים' : 'פירוט חשבונות'} ({acc.subaccount_count})
+                    {acc.subaccount_count > 1
+                      ? `${isCard(acc.source) ? 'פירוט כרטיסים' : 'פירוט חשבונות'} (${acc.subaccount_count})`
+                      : (isCard(acc.source) ? 'כינוי לכרטיס' : 'כינוי לחשבון')}
                     {acc.excluded_count > 0 && (
                       <span className="text-amber-500/80 text-xs">— {acc.excluded_count} לא נכללים</span>
                     )}
@@ -486,24 +540,35 @@ export default function AccountsPage() {
                             </p>
                           )}
                           {subData[acc.id].map(s => (
-                            <label key={s.account_number} className="flex items-center justify-between gap-3 cursor-pointer select-none">
-                              <span className="flex items-center gap-2 text-sm text-gray-300">
-                                <input
-                                  type="checkbox"
-                                  checked={s.included}
-                                  onChange={() => toggleSubInclude(acc.id, s.account_number, !s.included)}
-                                  className="w-4 h-4 accent-blue-600"
-                                />
-                                <span className="font-mono">{s.account_number}</span>
-                                <span className="text-gray-500 text-xs">· {s.txn_count} תנועות</span>
-                                {!s.included && <span className="text-amber-500/80 text-xs">(לא נכלל)</span>}
-                              </span>
-                              {s.balance != null && (
-                                <span className={`font-mono text-sm ${s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                  {ils(s.balance)}
-                                </span>
-                              )}
-                            </label>
+                            <div key={s.account_number} className="rounded-lg bg-gray-900/40 px-2.5 py-2 space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={s.included}
+                                    onChange={() => toggleSubInclude(acc.id, s.account_number, !s.included)}
+                                    className="w-4 h-4 accent-blue-600"
+                                  />
+                                  <span className="font-mono">{s.account_number}</span>
+                                  {s.label && <span className="text-blue-300 text-xs">· {s.label}</span>}
+                                  <span className="text-gray-500 text-xs">· {s.txn_count} תנועות</span>
+                                  {!s.included && <span className="text-amber-500/80 text-xs">(לא נכלל)</span>}
+                                </label>
+                                {s.balance != null && (
+                                  <span className={`font-mono text-sm ${s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                    {ils(s.balance)}
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="text"
+                                value={s.label || ''}
+                                onChange={e => setSubLabelLocal(acc.id, s.account_number, e.target.value)}
+                                onBlur={e => saveSubLabel(acc.id, s.account_number, e.target.value)}
+                                placeholder={isCard(acc.source) ? 'כינוי לכרטיס (לא חובה)' : 'כינוי לחשבון (לא חובה)'}
+                                className="w-full bg-gray-700 text-white rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+                              />
+                            </div>
                           ))}
                         </>
                       )}

@@ -20,13 +20,15 @@ export default function TransactionsPage() {
   const [page,    setPage]    = useState(1)
   const [loading, setLoading] = useState(true)
   const [accounts, setAccounts] = useState([])
+  const [subAccounts, setSubAccounts] = useState([])
   const [showAdd, setShowAdd] = useState(false)
-  const EMPTY_FILTERS = { search: '', owners: [], categories: [], account_ids: [], only_in_totals: '', date_from: '', date_to: '' }
+  const EMPTY_FILTERS = { search: '', owners: [], categories: [], account_ids: [], subaccounts: [], only_in_totals: '', date_from: '', date_to: '' }
   const [filters, setFilters] = useState(EMPTY_FILTERS)
 
-  // Load the account list once, for the account filter dropdown
+  // Load the account + sub-account lists once, for the filter dropdowns
   useEffect(() => {
     axios.get('/api/accounts').then(res => setAccounts(res.data)).catch(() => {})
+    axios.get('/api/accounts/subaccounts').then(res => setSubAccounts(res.data)).catch(() => {})
   }, [])
 
   // All distinct owners, taken from the accounts (so every owner shows up, not a
@@ -41,6 +43,7 @@ export default function TransactionsPage() {
       if (filters.owners.length)     params.owner = filters.owners.join(',')
       if (filters.categories.length) params.category = filters.categories.join(',')
       if (filters.account_ids.length) params.account_id = filters.account_ids.join(',')
+      if (filters.subaccounts.length) params.subaccount = filters.subaccounts.join(',')
       if (filters.only_in_totals)    params.only_in_totals = filters.only_in_totals
       if (filters.date_from)         params.date_from = filters.date_from
       if (filters.date_to)           params.date_to = filters.date_to
@@ -146,6 +149,20 @@ export default function TransactionsPage() {
           selected={filters.account_ids}
           onChange={v => setFilter('account_ids', v)}
         />
+        {subAccounts.length > 0 && (
+          <MultiSelect
+            label="כרטיס / תת-חשבון"
+            options={subAccounts
+              // When specific accounts are chosen, narrow the sub-account list to them.
+              .filter(s => filters.account_ids.length === 0 || filters.account_ids.includes(String(s.account_id)))
+              .map(s => ({
+                value: `${s.account_id}:${s.account_number}`,
+                label: `${s.account_name} · ${s.label ? `${s.label} (${s.account_number})` : s.account_number}`,
+              }))}
+            selected={filters.subaccounts}
+            onChange={v => setFilter('subaccounts', v)}
+          />
+        )}
         <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -239,7 +256,14 @@ export default function TransactionsPage() {
                       <NoteEditor id={r.id} note={r.note} onSaved={n => updateNote(r.id, n)} />
                     </td>
                     <td className="px-4 py-3 text-gray-400">{r.owner}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{SOURCE_LABELS[r.source] || r.source}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      <div>{r.account_name || SOURCE_LABELS[r.source] || r.source}</div>
+                      {r.account_number && (
+                        <div className="text-gray-600">
+                          {r.account_label ? `${r.account_label} · ${r.account_number}` : r.account_number}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                   {rulePrompt?.id === r.id && (
                     <tr>

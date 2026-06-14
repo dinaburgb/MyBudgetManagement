@@ -46,6 +46,22 @@ router.get('/', (req, res) => {
   if (status)     { where.push('status = ?');     params.push(status) }
   if (account_id) addIn('account_id', account_id, Number)
   if (exclude_account_id) { where.push('account_id != ?'); params.push(Number(exclude_account_id)) }
+  // Sub-account filter: comma-separated "accountId:accountNumber" pairs. Matched
+  // as (account_id = ? AND account_number = ?) so a number can't collide across
+  // two different logins that happen to share it.
+  if (req.query.subaccount) {
+    const ors = []
+    for (const pair of String(req.query.subaccount).split(',').map(s => s.trim()).filter(Boolean)) {
+      const sep = pair.indexOf(':')
+      if (sep === -1) continue
+      const accId = Number(pair.slice(0, sep))
+      const number = pair.slice(sep + 1)
+      if (!Number.isInteger(accId) || accId <= 0 || !number) continue
+      ors.push('(account_id = ? AND account_number = ?)')
+      params.push(accId, number)
+    }
+    if (ors.length) where.push(`(${ors.join(' OR ')})`)
+  }
   // Only transactions from accounts the user includes in totals
   if (only_in_totals === '1') {
     where.push('account_id IN (SELECT id FROM accounts WHERE include_in_totals = 1)')
@@ -78,8 +94,11 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT id, external_id, date, processed_date, amount, original_currency,
            charged_amount, charged_currency, description, memo, note, category,
-           owner, account_id, account_name, source, card_last4, type,
-           installment_number, installment_total, status, is_transfer
+           owner, account_id, account_number, account_name, source, card_last4, type,
+           installment_number, installment_total, status, is_transfer,
+           (SELECT label FROM subaccount_labels sl
+              WHERE sl.account_id = transactions.account_id
+                AND sl.account_number = transactions.account_number) AS account_label
     FROM transactions
     ${whereClause}
     ORDER BY date DESC, id DESC

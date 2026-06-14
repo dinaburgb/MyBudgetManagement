@@ -11,7 +11,7 @@ import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
 import { seedCategories } from '../server/db/categories.js'
 import { computeBudgetOverview } from '../server/db/budgets.js'
-import { listSubAccounts, setSubAccountIncluded } from '../server/db/subaccounts.js'
+import { listSubAccounts, listAllSubAccounts, setSubAccountIncluded, setSubAccountLabel } from '../server/db/subaccounts.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -76,6 +76,55 @@ test('setSubAccountIncluded(false) is idempotent (no duplicate rows)', () => {
   setSubAccountIncluded(db, 1, '222', false)
   const c = db.prepare(`SELECT COUNT(*) c FROM excluded_subaccounts WHERE account_id=1 AND account_number='222'`).get().c
   assert.strictEqual(c, 1)
+})
+
+test('label defaults to empty, then can be set and listed', () => {
+  const db = freshDb()
+  assert.ok(listSubAccounts(db, 1).every(s => s.label === ''))
+  setSubAccountLabel(db, 1, '222', 'יומיומי')
+  const s222 = listSubAccounts(db, 1).find(s => s.account_number === '222')
+  assert.strictEqual(s222.label, 'יומיומי')
+})
+
+test('setting a label is an upsert (one row, value replaced)', () => {
+  const db = freshDb()
+  setSubAccountLabel(db, 1, '222', 'ראשון')
+  setSubAccountLabel(db, 1, '222', 'שני')
+  const c = db.prepare(`SELECT COUNT(*) c FROM subaccount_labels WHERE account_id=1 AND account_number='222'`).get().c
+  assert.strictEqual(c, 1)
+  assert.strictEqual(listSubAccounts(db, 1).find(s => s.account_number === '222').label, 'שני')
+})
+
+test('blank label clears the nickname (row removed)', () => {
+  const db = freshDb()
+  setSubAccountLabel(db, 1, '222', 'משהו')
+  setSubAccountLabel(db, 1, '222', '   ')
+  const c = db.prepare(`SELECT COUNT(*) c FROM subaccount_labels WHERE account_id=1 AND account_number='222'`).get().c
+  assert.strictEqual(c, 0)
+  assert.strictEqual(listSubAccounts(db, 1).find(s => s.account_number === '222').label, '')
+})
+
+test('label and inclusion are independent', () => {
+  const db = freshDb()
+  setSubAccountLabel(db, 1, '222', 'יומיומי')
+  setSubAccountIncluded(db, 1, '222', false)
+  const s222 = listSubAccounts(db, 1).find(s => s.account_number === '222')
+  assert.strictEqual(s222.label, 'יומיומי')
+  assert.strictEqual(s222.included, false)
+})
+
+test('listAllSubAccounts lists every number with parent name, count and label', () => {
+  const db = freshDb()
+  setSubAccountLabel(db, 1, '111', 'יומיומי')
+  const all = listAllSubAccounts(db)
+  assert.strictEqual(all.length, 2)
+  const a111 = all.find(s => s.account_number === '111')
+  assert.strictEqual(a111.account_id, 1)
+  assert.strictEqual(a111.account_name, 'Bank Discount')
+  assert.strictEqual(a111.label, 'יומיומי')
+  assert.strictEqual(a111.txn_count, 1)
+  const a222 = all.find(s => s.account_number === '222')
+  assert.strictEqual(a222.label, null)  // no label set → null from the subquery
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

@@ -147,9 +147,10 @@ export async function scrapeAccount(account) {
   stats.accountsCount = breakdown.length
   stats.breakdown = breakdown
 
-  // Mark this account as successfully scraped now
+  // Mark this account as successfully scraped now. Store local computer time
+  // (not UTC) so the "last synced" label matches the clock on this machine.
   getDb().prepare(
-    `UPDATE accounts SET last_scraped = datetime('now'), updated_at = datetime('now') WHERE id = ?`
+    `UPDATE accounts SET last_scraped = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id = ?`
   ).run(account.id)
 
   logActivity('scrape_success', account.source,
