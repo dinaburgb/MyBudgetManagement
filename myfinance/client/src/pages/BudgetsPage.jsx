@@ -344,13 +344,19 @@ function BudgetEditor({ row, month, suggestion, isIncome = false, onClose, onSav
   )
 }
 
-/** Bottom-of-page roll-up: planned vs actual income/expenses + balance per month. */
+/** Bottom-of-page roll-up: planned vs actual income/expenses + balance per month.
+ *  A start-month selector lets the user choose where the roll-up begins. */
 function MonthlySummaryTable({ months }) {
+  // Hooks must run unconditionally — default the start to the earliest month.
+  const [from, setFrom] = useState('')
   if (!months.length) return null
   const signed = v => `${v >= 0 ? '+' : '−'}${ils(Math.abs(v))}`
   const balClass = v => v >= 0 ? 'text-green-400' : 'text-red-400'
 
-  const totals = months.reduce((a, m) => ({
+  const start = from || months[0].month
+  const visible = months.filter(m => m.month >= start)
+
+  const totals = visible.reduce((a, m) => ({
     plannedIncome: a.plannedIncome + m.plannedIncome,
     actualIncome: a.actualIncome + m.actualIncome,
     plannedExpense: a.plannedExpense + m.plannedExpense,
@@ -369,7 +375,19 @@ function MonthlySummaryTable({ months }) {
 
   return (
     <div className="mt-8">
-      <h3 className="text-sm font-medium text-gray-400 mb-2">סיכום חודשי (בפועל / בתקציב)</h3>
+      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+        <h3 className="text-sm font-medium text-gray-400">סיכום חודשי (בפועל / בתקציב)</h3>
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          מתחיל מ:
+          <select
+            value={start}
+            onChange={e => setFrom(e.target.value)}
+            className="bg-gray-800 text-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {months.map(m => <option key={m.month} value={m.month}>{monthLabel(m.month)}</option>)}
+          </select>
+        </label>
+      </div>
       <div className="bg-gray-900 rounded-xl p-2 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -381,7 +399,7 @@ function MonthlySummaryTable({ months }) {
             </tr>
           </thead>
           <tbody>
-            {months.map(m => (
+            {visible.map(m => (
               <tr key={m.month} className="border-t border-gray-800">
                 <td className="px-2 py-2 text-right text-gray-300 whitespace-nowrap">{monthLabel(m.month)}</td>
                 {cell(m.actualIncome, m.plannedIncome, 'text-emerald-400')}
