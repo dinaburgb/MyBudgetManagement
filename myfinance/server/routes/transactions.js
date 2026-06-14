@@ -79,7 +79,7 @@ router.get('/', (req, res) => {
     SELECT id, external_id, date, processed_date, amount, original_currency,
            charged_amount, charged_currency, description, memo, note, category,
            owner, account_id, account_name, source, card_last4, type,
-           installment_number, installment_total, status
+           installment_number, installment_total, status, is_transfer
     FROM transactions
     ${whereClause}
     ORDER BY date DESC, id DESC

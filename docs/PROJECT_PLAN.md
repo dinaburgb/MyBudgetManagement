@@ -105,6 +105,22 @@ Status of each bank / card integration:
   - Tests: `tests/test_categorize.js` now 20. Full suite: 7 files passing.
   - PENDING: mortgage (משכנתא) — Mizrahi not synced yet (0 matching rows) and the
     target category isn't decided, so it's deferred.
+- **Internal-transfer detection (2026-06-14):**
+  - `transactions.is_transfer` flag (migration). A flagged transaction is ignored
+    in every total (stats monthly/pie/income/drill, budgets spent + drill +
+    suggestions, categories summary).
+  - `db/transfers.js`: `findTransferCandidates` suggests pairs (opposite sign,
+    equal magnitude, different INCLUDED accounts, within ±5 days, neither already
+    a transfer, not previously dismissed; greedy nearest-date dedupe).
+    `markTransferPair` / `unmarkTransfer` / `ignoreTransferPair`
+    (+ `ignored_transfer_pairs` table). Routes under `/api/transfers`.
+  - Nothing is removed without confirmation: `TransfersReview.jsx` banner on the
+    Transactions page lists suggested pairs with "סמן כהעברה" / "לא העברה"; flagged
+    rows show an "העברה פנימית" badge with an undo ✕.
+  - NOTE: only catches true A↔B transfers where BOTH legs are tracked. One-legged
+    moves (money from an untracked account, salary, CC repayment) don't pair — use
+    the income / excluded category flags for those.
+  - Tests: `test_transfers.js` (6). Full suite: 11 files passing.
 - **Excluded categories, Overview totals, budget suggestions (2026-06-13):**
   - `categories.is_excluded` flag (migration auto-marks 'הורדת כרטיס אשראי') —
     such a category is ignored EVERYWHERE in totals: monthly KPIs, expense pie,

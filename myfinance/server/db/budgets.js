@@ -47,6 +47,7 @@ export function computeBudgetOverview(db = getDb(), month) {
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
       AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.is_transfer = 0
       AND substr(t.date, 1, 7) = ?
     GROUP BY t.category
   `).all(month)
@@ -121,6 +122,7 @@ export function budgetCategoryTransactions(db, category, month) {
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
       AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.is_transfer = 0
       AND t.category = ?
       AND substr(t.date, 1, 7) = ?
     ORDER BY t.date DESC, t.id DESC
@@ -148,6 +150,7 @@ export function budgetSuggestions(db = getDb(), monthsBack = 6) {
     JOIN accounts a ON a.id = t.account_id
     WHERE a.include_in_totals = 1
       AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.is_transfer = 0
       AND substr(t.date, 1, 7) IN (${mP})
       AND t.category NOT IN (SELECT name FROM categories WHERE is_excluded = 1 OR is_income = 1)
     GROUP BY t.category
