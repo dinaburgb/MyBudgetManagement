@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight, Power } from 'lucide-react'
+import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight, Power, PiggyBank } from 'lucide-react'
 import AccountsPage from './AccountsPage.jsx'
+import AssetsPage from './AssetsPage.jsx'
 import TransactionsPage from './TransactionsPage.jsx'
 import CategoriesPage from './CategoriesPage.jsx'
 import BudgetsPage from './BudgetsPage.jsx'
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'transactions', label: 'תנועות',     icon: List },
   { id: 'categories',   label: 'קטגוריות',   icon: Tag },
   { id: 'budgets',      label: 'תקציבים',    icon: Wallet },
+  { id: 'assets',       label: 'נכסים',      icon: PiggyBank },
 ]
 
 export default function Dashboard({ onLock }) {
@@ -102,6 +104,7 @@ export default function Dashboard({ onLock }) {
         {activeTab === 'transactions' && <TransactionsPage />}
         {activeTab === 'categories'   && <CategoriesPage />}
         {activeTab === 'budgets'      && <BudgetsPage />}
+        {activeTab === 'assets'       && <AssetsPage />}
       </main>
 
       {/* Short disclaimer at the bottom of every tab */}

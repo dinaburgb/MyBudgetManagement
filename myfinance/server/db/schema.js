@@ -128,6 +128,39 @@ CREATE TABLE IF NOT EXISTS ignored_transfer_pairs (
   PRIMARY KEY (low_id, high_id)
 );
 
+-- Financial assets held at pension funds, insurance companies and investment
+-- houses (Clal, Harel, Meitav, Mor, Excellence, Psagot, Interactive Brokers, ...).
+-- A row here is one holding: an institution + a savings type + an owner. Data is
+-- entered manually (updated about once a month); each balance update is stored as
+-- a snapshot in asset_snapshots, so growth over time is kept.
+CREATE TABLE IF NOT EXISTS financial_assets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  institution  TEXT NOT NULL,            -- e.g. 'כלל ביטוח', 'הראל', 'אינטראקטיב ברוקרס'
+  asset_type   TEXT NOT NULL,            -- savings type, e.g. 'קרן פנסיה', 'קופת גמל', 'קרן השתלמות', 'תיק השקעות'
+  label        TEXT DEFAULT '',          -- optional free-text name / policy number
+  owner        TEXT NOT NULL DEFAULT 'Boris',  -- Boris / Irena / Joint
+  currency     TEXT NOT NULL DEFAULT 'ILS',
+  note         TEXT DEFAULT '',
+  archived     INTEGER NOT NULL DEFAULT 0,  -- 1 = closed/sold, kept for history, out of totals
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One balance update for an asset, as of a given date (typically monthly). Keeps a
+-- history so we can show how each holding grows. 'deposits' is how much was paid in
+-- during the period leading to this snapshot (optional). One snapshot per asset/date.
+CREATE TABLE IF NOT EXISTS asset_snapshots (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  asset_id      INTEGER NOT NULL REFERENCES financial_assets(id) ON DELETE CASCADE,
+  snapshot_date TEXT NOT NULL,           -- YYYY-MM-DD the balance is as of
+  balance       REAL NOT NULL,           -- total holding value on that date
+  deposits      REAL DEFAULT 0,          -- amount paid in during the period (optional)
+  note          TEXT DEFAULT '',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(asset_id, snapshot_date)
+);
+CREATE INDEX IF NOT EXISTS idx_asset_snapshots_asset ON asset_snapshots(asset_id);
+
 -- Activity log — NO sensitive data, only operational events
 CREATE TABLE IF NOT EXISTS activity_log (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

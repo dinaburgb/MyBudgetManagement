@@ -222,6 +222,26 @@ Status of each bank / card integration:
     monthly-equivalent (half the bi-monthly charge) and compare over a 2-month
     range in the Overview table, where the lumpiness averages out.
 
+- **Financial-assets balance sheet (2026-06-14):**
+  - New "נכסים" tab — a manual balance sheet for holdings at pension/insurance/
+    investment providers (כלל, הראל, מיטב, מור, אקסלנס, פסגות, אינטראקטיב ברוקרס).
+    Phase 1 is manual entry; automatic pulls (Interactive Brokers etc.) are a
+    later phase. המסלקה הפנסיונית is explicitly out of scope.
+  - Schema: `financial_assets` (institution, asset_type/סוג חיסכון, label, owner,
+    currency, archived) + `asset_snapshots` (one balance update per asset/date,
+    with optional deposits/הפקדות and a note; UNIQUE(asset_id, snapshot_date) so
+    re-saving a date overwrites it). History is kept so each holding's growth is
+    visible (per-row "שינוי" vs the previous snapshot).
+  - `db/assets.js` (CRUD + `assetsSummary`: totals ILS-only, breakdowns by
+    institution/type/owner) and `routes/assets.js` under `/api/assets`. Summary
+    sums ILS holdings only — non-ILS (e.g. IB in USD) are listed per-asset but not
+    folded into the grand total.
+  - UI `client/src/pages/AssetsPage.jsx`: summary cards (total / last deposits /
+    by-type), an asset list with "עדכן יתרה" (monthly snapshot), היסטוריה, edit and
+    delete. Institution & type dropdowns have a free-text "אחר…" fallback.
+  - Tests: `tests/test_assets.js` (7). Full suite: 13 files passing.
+  - NOTE: archived asset = closed/sold; kept for history, out of all totals.
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero, Isracard, Max) against real accounts
