@@ -285,6 +285,12 @@ Status of each bank / card integration:
     (Dashboard.jsx); the end screen stays as a fallback for manually-opened tabs.
   - `myfinance/MyBudget.bat` launcher: double-click to start; when the server
     exits (close button), the process ends and the cmd window closes itself.
+- **Budgets: monthly summary table (2026-06-14):**
+  - Bottom-of-page roll-up: planned vs actual income/expenses + balance (מאזן)
+    for every month that has transaction data, with a grand-total row.
+    `monthlyBudgetSummary` in `db/budgets.js`, `GET /api/budgets/monthly-summary`,
+    `MonthlySummaryTable` in `BudgetsPage.jsx` (actual on top, budget muted below).
+  - Tests: `tests/test_budgets.js` now 16 (monthly roll-up).
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

@@ -9,7 +9,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { computeBudgetOverview, computeIncomeOverview, setBudget, deleteBudget, isValidMonth, budgetCategoryTransactions, budgetSuggestions } from '../db/budgets.js'
+import { computeBudgetOverview, computeIncomeOverview, monthlyBudgetSummary, setBudget, deleteBudget, isValidMonth, budgetCategoryTransactions, budgetSuggestions } from '../db/budgets.js'
 
 const router = Router()
 
@@ -32,6 +32,11 @@ router.get('/overview', (req, res) => {
   const rows = computeBudgetOverview(db, month)
   const incomeRows = computeIncomeOverview(db, month)
   res.json({ month, rows, incomeRows })
+})
+
+/** GET /api/budgets/monthly-summary — planned vs actual income/expense per month with data */
+router.get('/monthly-summary', (req, res) => {
+  res.json({ months: monthlyBudgetSummary(getDb()) })
 })
 
 /** GET /api/budgets/suggestions — suggested monthly budgets from the last 6 months */

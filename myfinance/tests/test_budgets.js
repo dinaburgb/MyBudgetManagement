@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
-import { computeBudgetOverview, computeIncomeOverview, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions, budgetEnvelope } from '../server/db/budgets.js'
+import { computeBudgetOverview, computeIncomeOverview, monthlyBudgetSummary, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions, budgetEnvelope } from '../server/db/budgets.js'
 import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -212,6 +212,30 @@ test('income categories are split out: earned vs target, kept out of expense row
 test('computeIncomeOverview is empty when no income categories exist', () => {
   const db = freshDb()
   assert.deepStrictEqual(computeIncomeOverview(db, '2026-06'), [])
+})
+
+test('monthlyBudgetSummary rolls up planned vs actual income/expense per data month', () => {
+  const db = freshDb()
+  db.prepare(`UPDATE categories SET is_income = 1 WHERE name = 'בריאות'`).run()  // income for the test
+  setBudget(db, 'מזון', 1000)      // expense default
+  setBudget(db, 'בריאות', 18000)   // income target
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'מזון',   chargedAmount: -800,   date: '2026-05-10T00:00:00.000Z', description: 'm-may' }),
+    txn({ category: 'בריאות', chargedAmount: 17000,  date: '2026-05-05T00:00:00.000Z', description: 'i-may' }),
+    txn({ category: 'מזון',   chargedAmount: -1200,  date: '2026-06-10T00:00:00.000Z', description: 'm-jun' }),
+    txn({ category: 'בריאות', chargedAmount: 18000,  date: '2026-06-05T00:00:00.000Z', description: 'i-jun' }),
+  ] }, db)
+
+  const months = monthlyBudgetSummary(db)
+  assert.deepStrictEqual(months.map(m => m.month), ['2026-05', '2026-06'])  // oldest first
+  const may = months[0]
+  assert.strictEqual(may.plannedExpense, 1000)
+  assert.strictEqual(may.actualExpense, 800)
+  assert.strictEqual(may.plannedIncome, 18000)
+  assert.strictEqual(may.actualIncome, 17000)
+  assert.strictEqual(may.actualBalance, 16200)   // 17000 - 800
+  assert.strictEqual(may.plannedBalance, 17000)  // 18000 - 1000
+  assert.strictEqual(months[1].actualBalance, 16800)  // 18000 - 1200
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

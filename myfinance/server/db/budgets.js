@@ -252,6 +252,64 @@ function spentByCategoryMonth(db, months) {
 }
 
 /**
+ * Per-month roll-up of planned vs actual income and expenses, for every month
+ * that has transaction data — the data behind the bottom summary table on the
+ * Budgets page. Actuals mirror the tiles: expense = spend in non-income,
+ * non-excluded categories; income = earnings in income categories. Planned sums
+ * the effective budget limits for that month (income vs expense kept apart).
+ *
+ * @returns {Array<{month, plannedIncome, actualIncome, plannedExpense,
+ *                   actualExpense, plannedBalance, actualBalance}>} oldest first
+ */
+export function monthlyBudgetSummary(db = getDb()) {
+  // Actual income/expense per month, from included accounts/sub-accounts only.
+  const actualRows = db.prepare(`
+    SELECT substr(t.date, 1, 7) AS month,
+           SUM(CASE WHEN t.amount < 0
+                     AND t.category NOT IN (SELECT name FROM categories WHERE is_excluded = 1)
+                     AND t.category NOT IN (SELECT name FROM categories WHERE is_income = 1)
+                    THEN -t.amount ELSE 0 END) AS expense,
+           SUM(CASE WHEN t.amount > 0
+                     AND t.category IN (SELECT name FROM categories WHERE is_income = 1)
+                    THEN t.amount ELSE 0 END) AS income
+    FROM transactions t
+    JOIN accounts a ON a.id = t.account_id
+    WHERE a.include_in_totals = 1
+      AND ${notExcludedSql('t.account_id', 't.account_number')}
+      AND t.is_transfer = 0
+    GROUP BY substr(t.date, 1, 7)
+    ORDER BY month
+  `).all()
+
+  // Planned scaffolding: effective limit per category per month.
+  const defaultRows  = db.prepare(`SELECT category, amount, effective_from FROM budgets WHERE month = ''`).all()
+  const overrideRows = db.prepare(`SELECT category, month, amount FROM budgets WHERE month != ''`).all()
+  const defaults    = new Map(defaultRows.map(r => [r.category, r.amount]))
+  const defaultFrom = new Map(defaultRows.map(r => [r.category, r.effective_from || '']))
+  const overrideByKey = new Map(overrideRows.map(r => [`${r.category}|${r.month}`, r.amount]))
+  const incomeSet  = new Set(incomeCategoryNames(db))
+  const budgetCats = new Set([...defaults.keys(), ...overrideRows.map(r => r.category)])
+
+  return actualRows.map(r => {
+    let plannedIncome = 0, plannedExpense = 0
+    for (const cat of budgetCats) {
+      const lim = effectiveLimit(cat, r.month, defaults, defaultFrom, overrideByKey)
+      if (lim == null) continue
+      if (incomeSet.has(cat)) plannedIncome += lim
+      else plannedExpense += lim
+    }
+    const actualIncome = r.income || 0, actualExpense = r.expense || 0
+    return {
+      month: r.month,
+      plannedIncome, actualIncome,
+      plannedExpense, actualExpense,
+      plannedBalance: plannedIncome - plannedExpense,
+      actualBalance: actualIncome - actualExpense,
+    }
+  })
+}
+
+/**
  * Total effective budget per category across a set of months. For each month the
  * effective limit is the month override if present, else the recurring default.
  * Limits are summed across the months; a category with no limit in ANY of the

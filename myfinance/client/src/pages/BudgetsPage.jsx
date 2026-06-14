@@ -344,6 +344,71 @@ function BudgetEditor({ row, month, suggestion, isIncome = false, onClose, onSav
   )
 }
 
+/** Bottom-of-page roll-up: planned vs actual income/expenses + balance per month. */
+function MonthlySummaryTable({ months }) {
+  if (!months.length) return null
+  const signed = v => `${v >= 0 ? '+' : '−'}${ils(Math.abs(v))}`
+  const balClass = v => v >= 0 ? 'text-green-400' : 'text-red-400'
+
+  const totals = months.reduce((a, m) => ({
+    plannedIncome: a.plannedIncome + m.plannedIncome,
+    actualIncome: a.actualIncome + m.actualIncome,
+    plannedExpense: a.plannedExpense + m.plannedExpense,
+    actualExpense: a.actualExpense + m.actualExpense,
+    plannedBalance: a.plannedBalance + m.plannedBalance,
+    actualBalance: a.actualBalance + m.actualBalance,
+  }), { plannedIncome: 0, actualIncome: 0, plannedExpense: 0, actualExpense: 0, plannedBalance: 0, actualBalance: 0 })
+
+  // Actual on top, planned (budget) below it in muted gray.
+  const cell = (actual, planned, cls = 'text-gray-300') => (
+    <td className="px-2 py-2 text-center font-mono">
+      <div className={cls}>{ils(actual)}</div>
+      <div className="text-[11px] text-gray-600">{ils(planned)}</div>
+    </td>
+  )
+
+  return (
+    <div className="mt-8">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">סיכום חודשי (בפועל / בתקציב)</h3>
+      <div className="bg-gray-900 rounded-xl p-2 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-gray-500 text-xs">
+              <th className="px-2 py-2 text-right font-medium">חודש</th>
+              <th className="px-2 py-2 text-center font-medium">הכנסות</th>
+              <th className="px-2 py-2 text-center font-medium">הוצאות</th>
+              <th className="px-2 py-2 text-center font-medium">מאזן</th>
+            </tr>
+          </thead>
+          <tbody>
+            {months.map(m => (
+              <tr key={m.month} className="border-t border-gray-800">
+                <td className="px-2 py-2 text-right text-gray-300 whitespace-nowrap">{monthLabel(m.month)}</td>
+                {cell(m.actualIncome, m.plannedIncome, 'text-emerald-400')}
+                {cell(m.actualExpense, m.plannedExpense, 'text-gray-300')}
+                <td className="px-2 py-2 text-center font-mono">
+                  <div className={balClass(m.actualBalance)}>{signed(m.actualBalance)}</div>
+                  <div className="text-[11px] text-gray-600">{signed(m.plannedBalance)}</div>
+                </td>
+              </tr>
+            ))}
+            {/* Grand total across all months */}
+            <tr className="border-t-2 border-gray-700 font-medium">
+              <td className="px-2 py-2 text-right text-white">סך הכול</td>
+              {cell(totals.actualIncome, totals.plannedIncome, 'text-emerald-400')}
+              {cell(totals.actualExpense, totals.plannedExpense, 'text-gray-200')}
+              <td className="px-2 py-2 text-center font-mono">
+                <div className={`font-bold ${balClass(totals.actualBalance)}`}>{signed(totals.actualBalance)}</div>
+                <div className="text-[11px] text-gray-600">{signed(totals.plannedBalance)}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function BudgetsPage() {
   const { categories, reload: reloadCategories } = useCategories()
   const [month, setMonth] = useState(currentMonthKey())
@@ -351,12 +416,17 @@ export default function BudgetsPage() {
   const [loading, setLoading] = useState(true)
   const [suggestions, setSuggestions] = useState({})
   const [editing, setEditing] = useState(null)   // the row being edited, or null
+  const [monthly, setMonthly] = useState([])     // per-month roll-up for the summary table
   const options = monthOptions()
 
   async function load() {
     try {
-      const res = await axios.get('/api/budgets/overview', { params: { month } })
-      setData(res.data)
+      const [overview, summary] = await Promise.all([
+        axios.get('/api/budgets/overview', { params: { month } }),
+        axios.get('/api/budgets/monthly-summary'),
+      ])
+      setData(overview.data)
+      setMonthly(summary.data.months || [])
     } catch {
       setData(null)
     } finally {
@@ -465,6 +535,9 @@ export default function BudgetsPage() {
           />
         ))}
       </div>
+
+      {/* Monthly roll-up across all months with data */}
+      <MonthlySummaryTable months={monthly} />
 
       {editing && (
         <BudgetEditor
