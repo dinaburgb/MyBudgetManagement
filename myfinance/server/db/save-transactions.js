@@ -124,6 +124,14 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
   db.exec('BEGIN')
   try {
     for (const txn of txns) {
+      // Skip zero-amount pending "pre-authorization" holds. Some cards (notably
+      // Max) return a temporary pending row with chargedAmount 0 and no identifier
+      // for a recent purchase; the real charge arrives later as a separate
+      // completed record with a different date/amount, so the hold never
+      // reconciles against it (the content hash differs) and would linger forever.
+      // It carries no value, so drop it on import.
+      if (txn.status === 'pending' && Number(txn.chargedAmount) === 0) { skipped++; continue }
+
       const baseHash = computeContentHash(
         account.source, accountNumber, txn.date, txn.chargedAmount,
         txn.description, txn.originalCurrency,

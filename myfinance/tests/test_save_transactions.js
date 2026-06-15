@@ -150,6 +150,33 @@ test('pending becomes completed updates same row (no duplicate)', () => {
   assert.strictEqual(rows[0].status, 'completed')  // now completed
 })
 
+test('zero-amount pending holds (Max pre-auth) are skipped, real charge kept', () => {
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '8927', txns: [
+    // Max pre-authorization hold: pending, amount 0, no identifier — should be dropped.
+    txn({ identifier: undefined, status: 'pending', date: '2026-06-12T00:00:00.000Z',
+          originalAmount: 0, chargedAmount: 0, description: 'מעדנית אברהמי' }),
+    // The real settled charge for the same purchase — must be kept.
+    txn({ identifier: 'R1', status: 'completed', date: '2026-06-11T00:00:00.000Z',
+          originalAmount: -94.3, chargedAmount: -94.3, description: 'מעדנית אברהמי' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 1)
+  assert.strictEqual(stats.skipped, 1)
+  const rows = db.prepare('SELECT amount, status FROM transactions').all()
+  assert.strictEqual(rows.length, 1)
+  assert.strictEqual(rows[0].amount, -94.3)
+  assert.strictEqual(rows[0].status, 'completed')
+})
+
+test('a non-zero pending charge is still kept (real upcoming charge)', () => {
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ identifier: 'U1', status: 'pending', chargedAmount: -50, description: 'GAS' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 1)
+  assert.strictEqual(stats.skipped, 0)
+})
+
 test('stores raw payload and installment fields', () => {
   const db = freshDb()
   saveAccountTransactions(account, { accountNumber: '123', txns: [
