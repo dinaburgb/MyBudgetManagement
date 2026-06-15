@@ -172,6 +172,17 @@ export async function scrapeAccount(account) {
 const onezeroOtpSessions = new Map()           // accountId -> { scraper, createdAt }
 const OTP_SESSION_TTL_MS = 5 * 60 * 1000
 
+// OneZero sits behind Cloudflare, which blocks Node's TLS fingerprint and returns
+// an HTML challenge page instead of JSON — the library then fails parsing it with
+// "Unexpected token '<'". Translate that into a clear message instead of leaking
+// the parser error to the user.
+function friendlyOneZeroError(msg) {
+  if (/<!DOCTYPE|Unexpected token '<'|not valid JSON/i.test(msg || '')) {
+    return 'OneZero חסום כרגע על ידי Cloudflare ולא ניתן להתחבר אוטומטית מהמחשב. נסה שוב מאוחר יותר, או הזן את התנועות ידנית.'
+  }
+  return msg
+}
+
 function pruneOtpSessions() {
   const now = Date.now()
   for (const [id, s] of onezeroOtpSessions) {
@@ -204,13 +215,13 @@ export async function oneZeroStartOtp(account) {
     const scraper = createScraper({ companyId: CompanyTypes.oneZero, startDate: new Date(), showBrowser: false, verbose: false })
     const r = await scraper.triggerTwoFactorAuth(phoneNumber)
     if (!r || r.success === false) {
-      return { success: false, errorMessage: r?.errorMessage || 'שליחת קוד ה-SMS נכשלה' }
+      return { success: false, errorMessage: friendlyOneZeroError(r?.errorMessage) || 'שליחת קוד ה-SMS נכשלה' }
     }
     onezeroOtpSessions.set(account.id, { scraper, createdAt: Date.now() })
     return { success: true }
   } catch (err) {
     console.error('[onezero] triggerTwoFactorAuth failed:', err.message)
-    return { success: false, errorMessage: err.message }
+    return { success: false, errorMessage: friendlyOneZeroError(err.message) }
   }
 }
 
@@ -228,7 +239,7 @@ export async function oneZeroVerifyOtp(account, otpCode) {
   try {
     const r = await session.scraper.getLongTermTwoFactorToken(code)
     if (!r || r.success === false || !r.longTermTwoFactorAuthToken) {
-      return { success: false, errorMessage: r?.errorMessage || 'קוד שגוי או שפג תוקפו' }
+      return { success: false, errorMessage: friendlyOneZeroError(r?.errorMessage) || 'קוד שגוי או שפג תוקפו' }
     }
     // Merge the long-term token into the stored credentials (re-encrypt).
     let credentials = JSON.parse(decrypt(account.credentials))
@@ -241,6 +252,6 @@ export async function oneZeroVerifyOtp(account, otpCode) {
     return { success: true }
   } catch (err) {
     console.error('[onezero] getLongTermTwoFactorToken failed:', err.message)
-    return { success: false, errorMessage: err.message }
+    return { success: false, errorMessage: friendlyOneZeroError(err.message) }
   }
 }

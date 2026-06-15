@@ -26,7 +26,7 @@ Status of each bank / card integration:
 | FIBI (Beinleumi)  | fibi       | ✅ Working     | Dedup by content (reuses reference per payee)    |
 | Visa Cal          | cal        | ✅ Connected   | Connected 2026-06-12 — 87 transactions imported  |
 | Mizrahi Tefahot   | mizrahi    | ⚙️ Wired       | Configured, not yet tested with real account     |
-| OneZero           | onezero    | 🔑 SMS link    | SMS-OTP linking flow added; stores otpLongTermToken; needs a real-account test |
+| OneZero           | onezero    | 🚫 CF-blocked  | SMS-link flow built, but Cloudflare blocks Node's TLS fingerprint (403/HTML) for all OneZero calls; curl from the same machine passes. Needs a curl-backed transport or CSV import. Deferred. |
 | Isracard          | isracard   | ⚙️ Wired       | Configured, not yet tested with real account     |
 | Max               | max        | ⚙️ Wired       | Configured, not yet tested with real account     |
 
@@ -266,8 +266,15 @@ Status of each bank / card integration:
     and `/verify`.
   - UI (`AccountsPage.jsx`): added the required `phoneNumber` field (international
     +972…) and a "חבר (SMS)" button with an inline code-entry panel for OneZero
-    accounts. After linking, normal "עדכון" works.
-  - Not yet verified against a real OneZero account (needs the user's phone).
+    accounts. Also added a show/hide eye toggle on every credential password field.
+  - BLOCKED: OneZero is behind Cloudflare, which rejects Node's TLS fingerprint
+    with a 403 HTML challenge for every call (devices/token, otp/prepare, and the
+    GraphQL data fetch) — the library uses Node `fetch`, so the whole flow fails
+    with "Unexpected token '<'". `curl` from the same machine returns JSON, so it's
+    a transport-fingerprint issue, not our code. `friendlyOneZeroError` now surfaces
+    a clear Hebrew message instead of the parser error. A real fix needs a
+    curl/impersonating-TLS transport or a CSV/Excel statement import. Deferred per
+    user. The phoneNumber field and password eye-toggle are kept (both useful).
 - **Fix: pending pre-authorization holds no longer duplicate (2026-06-15):**
   - Cards report a temporary `pending` hold for a recent purchase (Max with a
     zero amount, Cal/others with a real amount e.g. a ₪300 fuel pre-auth); the
