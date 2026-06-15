@@ -17,8 +17,8 @@ function test(name, fn) {
 function freshDb() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank','discount','Boris','x',1)`).run()
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Cal','cal','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank','discount','Me','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Cal','cal','Me','x',1)`).run()
   return db
 }
 

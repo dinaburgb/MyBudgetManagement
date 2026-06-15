@@ -53,7 +53,7 @@ test('lost sentinel + wrong password does NOT re-init (H5 guard)', () => {
   // Add an account whose credentials are encrypted under the correct key.
   const cred = encrypt(JSON.stringify({ user: 'x', password: 'y' }))
   db.prepare(`INSERT INTO accounts (name,source,owner,credentials) VALUES (?,?,?,?)`)
-    .run('A', 'discount', 'Boris', cred)
+    .run('A', 'discount', 'Me', cred)
   // Simulate a lost sentinel.
   fs.unlinkSync(sentinelPath); clearKey()
   assert.ok(!isPasswordSet())
@@ -69,7 +69,7 @@ test('lost sentinel + correct password recovers and recreates the sentinel', () 
   assert.strictEqual(unlockOrInit(PW, db), 'first_run')
   const cred = encrypt(JSON.stringify({ user: 'x' }))
   db.prepare(`INSERT INTO accounts (name,source,owner,credentials) VALUES (?,?,?,?)`)
-    .run('A', 'discount', 'Boris', cred)
+    .run('A', 'discount', 'Me', cred)
   fs.unlinkSync(sentinelPath); clearKey()
 
   assert.strictEqual(unlockOrInit(PW, db), 'recovered')

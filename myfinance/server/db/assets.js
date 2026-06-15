@@ -30,7 +30,7 @@ export function listAssets(db = getDb(), { includeArchived = false } = {}) {
 }
 
 /** Create a new asset (or liability). Returns the new row's id. */
-export function createAsset(db, { kind = 'asset', category = '', institution, asset_type, label = '', owner = 'Boris', currency = 'ILS', note = '' }) {
+export function createAsset(db, { kind = 'asset', category = '', institution, asset_type, label = '', owner = 'Me', currency = 'ILS', note = '' }) {
   // New rows go to the bottom of the list — one past the current max sort_order.
   const nextOrder = (db.prepare(`SELECT MAX(sort_order) AS m FROM financial_assets`).get().m || 0) + 1
   const info = db.prepare(`

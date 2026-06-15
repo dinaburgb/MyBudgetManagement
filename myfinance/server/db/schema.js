@@ -8,9 +8,9 @@ export const SCHEMA_SQL = `
 -- Stores encrypted credentials for each bank/card account
 CREATE TABLE IF NOT EXISTS accounts (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  name         TEXT NOT NULL,          -- display name, e.g. "Hapoalim — Boris"
+  name         TEXT NOT NULL,          -- display name, e.g. "הפועלים — אני"
   source       TEXT NOT NULL,          -- hapoalim / discount / fibi / mizrahi / onezero / isracard / cal / max
-  owner        TEXT NOT NULL DEFAULT 'Boris',  -- Boris / Irena / Joint
+  owner        TEXT NOT NULL DEFAULT 'Me',  -- Me / Partner / Joint
   credentials  TEXT NOT NULL,          -- AES-256-GCM encrypted JSON blob
   last_scraped TEXT,                   -- ISO timestamp of last successful scrape
   enabled      INTEGER NOT NULL DEFAULT 1,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   memo                TEXT DEFAULT '',          -- raw memo from the scraper (do not overwrite)
   note                TEXT DEFAULT '',          -- user's own free-text note on the transaction
   category            TEXT DEFAULT 'Other',
-  owner               TEXT DEFAULT 'Boris',  -- Boris / Irena / Joint
+  owner               TEXT DEFAULT 'Me',  -- Me / Partner / Joint
   account_id          INTEGER REFERENCES accounts(id),
   account_number      TEXT,
   account_name        TEXT,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS financial_assets (
   institution  TEXT NOT NULL,            -- e.g. 'כלל ביטוח', 'הראל', 'אינטראקטיב ברוקרס', 'בנק מזרחי'
   asset_type   TEXT NOT NULL,            -- savings type, e.g. 'קרן פנסיה', 'קופת גמל', 'קרן השתלמות', 'תיק השקעות', 'הלוואה'
   label        TEXT DEFAULT '',          -- optional free-text name / policy number
-  owner        TEXT NOT NULL DEFAULT 'Boris',  -- Boris / Irena / Joint
+  owner        TEXT NOT NULL DEFAULT 'Me',  -- Me / Partner / Joint
   currency     TEXT NOT NULL DEFAULT 'ILS',
   note         TEXT DEFAULT '',
   archived     INTEGER NOT NULL DEFAULT 0,  -- 1 = closed/sold, kept for history, out of totals

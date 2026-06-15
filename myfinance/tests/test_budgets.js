@@ -18,7 +18,7 @@ function test(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message}`) }
 }
 
-const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Boris' }
+const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Me' }
 
 function freshDb() {
   const db = new DatabaseSync(':memory:')

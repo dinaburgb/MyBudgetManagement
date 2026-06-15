@@ -16,7 +16,7 @@ export default function ManualTxnForm({ accounts, categories, owners, onAdded, o
   const [amount, setAmount] = useState('')
   const [kind, setKind] = useState('expense')         // 'expense' | 'income'
   const [category, setCategory] = useState(categories[0] || 'אחר')
-  const [owner, setOwner] = useState(owners[0] || 'Boris')
+  const [owner, setOwner] = useState(owners[0] || 'Me')
   const [accountId, setAccountId] = useState('')      // '' = cash / no account
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -78,7 +78,7 @@ export default function ManualTxnForm({ accounts, categories, owners, onAdded, o
           <label className="block text-xs text-gray-400 mb-1">בעלים</label>
           <select value={owner} onChange={e => setOwner(e.target.value)} className={field}>
             {owners.map(o => <option key={o} value={o}>{o}</option>)}
-            {owners.length === 0 && <option value="Boris">Boris</option>}
+            {owners.length === 0 && <option value="Me">אני</option>}
           </select>
         </div>
         <div>
