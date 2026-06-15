@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 
@@ -49,6 +49,7 @@ function AccountForm({ initial, onSave, onCancel }) {
   // The effective owner value that gets saved
   const owner = ownerSelect === 'Other' ? customOwner.trim() : ownerSelect
   const [creds,  setCreds]  = useState({})
+  const [showSecret, setShowSecret] = useState({})   // field key -> reveal password
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
 
@@ -153,14 +154,26 @@ function AccountForm({ initial, onSave, onCancel }) {
         {fields.map(f => (
           <div key={f.key}>
             <label className="block text-sm text-gray-400 mb-1">{f.label}</label>
-            <input
-              type={f.secret ? 'password' : 'text'}
-              value={creds[f.key] || ''}
-              onChange={e => setCreds(prev => ({ ...prev, [f.key]: e.target.value }))}
-              placeholder={f.placeholder || ''}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
-              autoComplete="off"
-            />
+            <div className="relative">
+              <input
+                type={f.secret && !showSecret[f.key] ? 'password' : 'text'}
+                value={creds[f.key] || ''}
+                onChange={e => setCreds(prev => ({ ...prev, [f.key]: e.target.value }))}
+                placeholder={f.placeholder || ''}
+                className={`w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 ${f.secret ? 'pl-10' : ''}`}
+                autoComplete="off"
+              />
+              {f.secret && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(s => ({ ...s, [f.key]: !s[f.key] }))}
+                  title={showSecret[f.key] ? 'הסתר' : 'הצג'}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  {showSecret[f.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
