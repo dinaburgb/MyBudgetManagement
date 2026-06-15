@@ -124,7 +124,7 @@ export async function scrapeAccount(account) {
 
   // Save every account returned. One bank/card login can return several
   // accounts or cards — we save them all and report a per-account breakdown.
-  const stats = { inserted: 0, updated: 0, skipped: 0 }
+  const stats = { inserted: 0, updated: 0, skipped: 0, removedPending: 0 }
   const breakdown = []
   const nowISO = new Date().toISOString()
   const db = getDb()
@@ -133,6 +133,7 @@ export async function scrapeAccount(account) {
     stats.inserted += s.inserted
     stats.updated  += s.updated
     stats.skipped  += s.skipped
+    stats.removedPending += s.removedPending || 0
     // Store the balance "as of update day" for this account/card. Banks provide a
     // real balance; credit cards typically return undefined → stored as null.
     upsertBalance(db, account.id, scrapedAccount.accountNumber,
@@ -154,7 +155,7 @@ export async function scrapeAccount(account) {
   ).run(account.id)
 
   logActivity('scrape_success', account.source,
-    `inserted ${stats.inserted}, updated ${stats.updated}, skipped ${stats.skipped}`)
+    `inserted ${stats.inserted}, updated ${stats.updated}, skipped ${stats.skipped}, removedPending ${stats.removedPending}`)
 
   return { success: true, accounts: result.accounts, stats }
 }

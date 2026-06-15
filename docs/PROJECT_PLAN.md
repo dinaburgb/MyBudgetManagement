@@ -255,6 +255,21 @@ Status of each bank / card integration:
   - UI: up/down arrows per row, ברוטו/התחייבויות/נטו summary cards, by-category +
     by-type breakdown cards, category badge, liabilities shown in red with a minus.
   - Tests: `tests/test_assets.js` now 11 (added liability net, by-category, move).
+- **Fix: pending pre-authorization holds no longer duplicate (2026-06-15):**
+  - Cards report a temporary `pending` hold for a recent purchase (Max with a
+    zero amount, Cal/others with a real amount e.g. a ₪300 fuel pre-auth); the
+    real charge later settles as a separate `completed` row with a different
+    date/amount, so the content-hash dedup couldn't reconcile them and the hold
+    lingered as a duplicate.
+  - `save-transactions.js`: (1) skip zero-amount pending holds on import;
+    (2) reconcile pending rows — after an import that returned data, delete any
+    pending row for that account/sub-account, within the scraped date range, that
+    this import no longer reported (it settled or was canceled). Works for any
+    card regardless of amount/identifier. `removedPending` added to scrape stats.
+  - One-time cleanup removed 10 stranded zero-amount pending rows (Max); DB backed
+    up first to `data/backups/`.
+  - Tests: `tests/test_save_transactions.js` now 17 (zero-skip, settle-removes-hold,
+    still-pending-kept, empty-scrape guard, sub-account scoping).
 - **Budgets rework: donut tiles, start date, carryover, income (2026-06-14):**
   - Budgets page redesigned from wide rows into a compact donut-tile grid
     (`client/src/pages/BudgetsPage.jsx`): center shows spent (big) + monthly
