@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 
@@ -25,7 +25,7 @@ const CREDENTIAL_FIELDS = {
   discount:  [{ key: 'id',        label: 'תעודת זהות' }, { key: 'password', label: 'סיסמה', secret: true }, { key: 'num', label: 'קוד משתמש' }],
   fibi:      [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
   mizrahi:   [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
-  onezero:   [{ key: 'email',     label: 'אימייל'    }, { key: 'password', label: 'סיסמה', secret: true }],
+  onezero:   [{ key: 'email',     label: 'אימייל'    }, { key: 'password', label: 'סיסמה', secret: true }, { key: 'phoneNumber', label: 'טלפון (בינלאומי, +972...)', placeholder: '+97250...' }],
   isracard:  [{ key: 'id',        label: 'תעודת זהות' }, { key: 'card6Digits', label: '6 ספרות בכרטיס' }, { key: 'password', label: 'סיסמה', secret: true }],
   cal:       [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
   max:       [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
@@ -49,6 +49,7 @@ function AccountForm({ initial, onSave, onCancel }) {
   // The effective owner value that gets saved
   const owner = ownerSelect === 'Other' ? customOwner.trim() : ownerSelect
   const [creds,  setCreds]  = useState({})
+  const [showSecret, setShowSecret] = useState({})   // field key -> reveal password
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
 
@@ -153,13 +154,26 @@ function AccountForm({ initial, onSave, onCancel }) {
         {fields.map(f => (
           <div key={f.key}>
             <label className="block text-sm text-gray-400 mb-1">{f.label}</label>
-            <input
-              type={f.secret ? 'password' : 'text'}
-              value={creds[f.key] || ''}
-              onChange={e => setCreds(prev => ({ ...prev, [f.key]: e.target.value }))}
-              className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-              autoComplete="off"
-            />
+            <div className="relative">
+              <input
+                type={f.secret && !showSecret[f.key] ? 'password' : 'text'}
+                value={creds[f.key] || ''}
+                onChange={e => setCreds(prev => ({ ...prev, [f.key]: e.target.value }))}
+                placeholder={f.placeholder || ''}
+                className={`w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500 ${f.secret ? 'pl-10' : ''}`}
+                autoComplete="off"
+              />
+              {f.secret && (
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(s => ({ ...s, [f.key]: !s[f.key] }))}
+                  title={showSecret[f.key] ? 'הסתר' : 'הצג'}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                >
+                  {showSecret[f.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -330,6 +344,29 @@ export default function AccountsPage() {
     }
   }
 
+  // OneZero SMS linking: { accountId, stage: 'sending'|'sent'|'verifying'|'linked', code, error }
+  const [otp, setOtp] = useState(null)
+
+  async function startOtp(acc) {
+    setOtp({ accountId: acc.id, stage: 'sending', code: '', error: '' })
+    try {
+      await axios.post('/api/scrape/onezero/start', { accountId: acc.id })
+      setOtp({ accountId: acc.id, stage: 'sent', code: '', error: '' })
+    } catch (err) {
+      setOtp({ accountId: acc.id, stage: 'error', code: '', error: err.response?.data?.error || 'שליחת ה-SMS נכשלה' })
+    }
+  }
+  async function verifyOtp() {
+    if (!otp?.code?.trim()) { setOtp(o => ({ ...o, error: 'הזן את הקוד שקיבלת ב-SMS' })); return }
+    setOtp(o => ({ ...o, stage: 'verifying', error: '' }))
+    try {
+      await axios.post('/api/scrape/onezero/verify', { accountId: otp.accountId, code: otp.code })
+      setOtp(o => ({ ...o, stage: 'linked', error: '' }))
+    } catch (err) {
+      setOtp(o => ({ ...o, stage: 'sent', error: err.response?.data?.error || 'אימות הקוד נכשל' }))
+    }
+  }
+
   async function handleSync(acc) {
     setSyncingId(acc.id)
     setSyncMsg(null)
@@ -469,6 +506,17 @@ export default function AccountsPage() {
                     ? <CheckCircle className="w-4 h-4 text-green-500" />
                     : <XCircle className="w-4 h-4 text-gray-600" />
                   }
+                  {/* OneZero needs an SMS-code link before it can sync */}
+                  {acc.source === 'onezero' && (
+                    <button
+                      onClick={() => startOtp(acc)}
+                      disabled={otp?.accountId === acc.id && otp.stage === 'sending'}
+                      title="התחברות עם קוד SMS (פעם אחת)"
+                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      {otp?.accountId === acc.id && otp.stage === 'sending' ? 'שולח…' : 'חבר (SMS)'}
+                    </button>
+                  )}
                   {/* Update / sync button */}
                   <button
                     onClick={() => handleSync(acc)}
@@ -606,6 +654,49 @@ export default function AccountsPage() {
                       ביטול
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* OneZero SMS linking panel */}
+              {otp?.accountId === acc.id && otp.stage !== 'sending' && (
+                <div className="mt-3 bg-gray-800 rounded-lg p-3">
+                  {otp.stage === 'linked' ? (
+                    <div className="text-sm text-green-400">
+                      ✓ חובר בהצלחה. עכשיו אפשר ללחוץ "עדכון" כדי למשוך תנועות. (בפעמים הבאות לא יידרש קוד SMS.)
+                    </div>
+                  ) : otp.stage === 'error' ? (
+                    <div className="text-sm text-red-400">{otp.error}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-300">נשלח קוד ב-SMS. הזן אותו כאן:</p>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={otp.code}
+                          onChange={e => setOtp(o => ({ ...o, code: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') verifyOtp() }}
+                          placeholder="קוד SMS"
+                          autoFocus
+                          className="flex-1 bg-gray-700 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
+                        />
+                        <button
+                          onClick={verifyOtp}
+                          disabled={otp.stage === 'verifying'}
+                          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          {otp.stage === 'verifying' ? 'מאמת…' : 'אשר'}
+                        </button>
+                        <button
+                          onClick={() => setOtp(null)}
+                          className="text-gray-400 hover:text-white px-2 py-2 text-sm transition-colors"
+                        >
+                          ביטול
+                        </button>
+                      </div>
+                      {otp.error && <p className="text-red-400 text-sm">{otp.error}</p>}
+                    </div>
+                  )}
                 </div>
               )}
 

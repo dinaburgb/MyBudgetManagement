@@ -26,7 +26,7 @@ Status of each bank / card integration:
 | FIBI (Beinleumi)  | fibi       | ✅ Working     | Dedup by content (reuses reference per payee)    |
 | Visa Cal          | cal        | ✅ Connected   | Connected 2026-06-12 — 87 transactions imported  |
 | Mizrahi Tefahot   | mizrahi    | ⚙️ Wired       | Configured, not yet tested with real account     |
-| OneZero           | onezero    | ⚙️ Wired       | Configured, not yet tested with real account     |
+| OneZero           | onezero    | 🚫 CF-blocked  | SMS-link flow built, but Cloudflare blocks Node's TLS fingerprint (403/HTML) for all OneZero calls; curl from the same machine passes. Needs a curl-backed transport or CSV import. Deferred. |
 | Isracard          | isracard   | ⚙️ Wired       | Configured, not yet tested with real account     |
 | Max               | max        | ⚙️ Wired       | Configured, not yet tested with real account     |
 
@@ -255,6 +255,26 @@ Status of each bank / card integration:
   - UI: up/down arrows per row, ברוטו/התחייבויות/נטו summary cards, by-category +
     by-type breakdown cards, category badge, liabilities shown in red with a minus.
   - Tests: `tests/test_assets.js` now 11 (added liability net, by-category, move).
+- **OneZero SMS-OTP linking (2026-06-15):**
+  - OneZero logs in with a one-time SMS code. Added a one-time link flow: trigger
+    an SMS, user enters the code, the library returns a long-term token stored as
+    `otpLongTermToken` in the account credentials so future scrapes skip the OTP.
+  - `scraper.js`: `oneZeroStartOtp(account)` (triggerTwoFactorAuth, keeps the
+    scraper instance with its OTP context in an in-memory 5-min session) and
+    `oneZeroVerifyOtp(account, code)` (getLongTermTwoFactorToken → re-encrypt creds
+    with the token). HTTP-only, no browser. Routes `POST /api/scrape/onezero/start`
+    and `/verify`.
+  - UI (`AccountsPage.jsx`): added the required `phoneNumber` field (international
+    +972…) and a "חבר (SMS)" button with an inline code-entry panel for OneZero
+    accounts. Also added a show/hide eye toggle on every credential password field.
+  - BLOCKED: OneZero is behind Cloudflare, which rejects Node's TLS fingerprint
+    with a 403 HTML challenge for every call (devices/token, otp/prepare, and the
+    GraphQL data fetch) — the library uses Node `fetch`, so the whole flow fails
+    with "Unexpected token '<'". `curl` from the same machine returns JSON, so it's
+    a transport-fingerprint issue, not our code. `friendlyOneZeroError` now surfaces
+    a clear Hebrew message instead of the parser error. A real fix needs a
+    curl/impersonating-TLS transport or a CSV/Excel statement import. Deferred per
+    user. The phoneNumber field and password eye-toggle are kept (both useful).
 - **Fix: pending pre-authorization holds no longer duplicate (2026-06-15):**
   - Cards report a temporary `pending` hold for a recent purchase (Max with a
     zero amount, Cal/others with a real amount e.g. a ₪300 fuel pre-auth); the

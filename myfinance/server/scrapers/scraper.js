@@ -13,7 +13,7 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { decrypt } from '../crypto/encryption.js'
+import { decrypt, encrypt } from '../crypto/encryption.js'
 import { getDb, backupDatabase, logActivity } from '../db/database.js'
 import { saveAccountTransactions } from '../db/save-transactions.js'
 import { upsertBalance } from '../db/balances.js'
@@ -158,4 +158,100 @@ export async function scrapeAccount(account) {
     `inserted ${stats.inserted}, updated ${stats.updated}, skipped ${stats.skipped}, removedPending ${stats.removedPending}`)
 
   return { success: true, accounts: result.accounts, stats }
+}
+
+// --- OneZero OTP linking ---------------------------------------------------
+// OneZero logs in with a one-time SMS code. The first time, we trigger an SMS,
+// the user types the code, and the library hands back a long-term token
+// (`otpLongTermToken`) which we store so future scrapes skip the SMS entirely.
+//
+// The OTP context lives on the scraper instance between triggering the SMS and
+// verifying the code, so we keep that one instance in memory across the two
+// calls. The flow is plain HTTP (no browser), so this is cheap.
+
+const onezeroOtpSessions = new Map()           // accountId -> { scraper, createdAt }
+const OTP_SESSION_TTL_MS = 5 * 60 * 1000
+
+// OneZero sits behind Cloudflare, which blocks Node's TLS fingerprint and returns
+// an HTML challenge page instead of JSON — the library then fails parsing it with
+// "Unexpected token '<'". Translate that into a clear message instead of leaking
+// the parser error to the user.
+function friendlyOneZeroError(msg) {
+  if (/<!DOCTYPE|Unexpected token '<'|not valid JSON/i.test(msg || '')) {
+    return 'OneZero חסום כרגע על ידי Cloudflare ולא ניתן להתחבר אוטומטית מהמחשב. נסה שוב מאוחר יותר, או הזן את התנועות ידנית.'
+  }
+  return msg
+}
+
+function pruneOtpSessions() {
+  const now = Date.now()
+  for (const [id, s] of onezeroOtpSessions) {
+    if (now - s.createdAt > OTP_SESSION_TTL_MS) onezeroOtpSessions.delete(id)
+  }
+}
+
+/**
+ * Step 1: trigger a OneZero SMS code to the account's stored phone number.
+ * Keeps the scraper instance (holding the OTP context) for the verify step.
+ * @returns {Promise<{success:boolean, errorMessage?:string}>}
+ */
+export async function oneZeroStartOtp(account) {
+  if (account.source !== 'onezero') return { success: false, errorMessage: 'Not a OneZero account' }
+  let credentials
+  try { credentials = JSON.parse(decrypt(account.credentials)) }
+  catch { return { success: false, errorMessage: 'Could not decrypt credentials' } }
+
+  const phoneNumber = String(credentials.phoneNumber || '').trim()
+  credentials = null
+  if (!phoneNumber) {
+    return { success: false, errorMessage: 'מספר טלפון חסר — ערוך את החשבון והוסף טלפון בפורמט בינלאומי (לדוגמה +97250...)' }
+  }
+  if (!phoneNumber.startsWith('+')) {
+    return { success: false, errorMessage: 'מספר הטלפון חייב להתחיל ב-+ וקידומת מדינה (לדוגמה +97250...)' }
+  }
+
+  pruneOtpSessions()
+  try {
+    const scraper = createScraper({ companyId: CompanyTypes.oneZero, startDate: new Date(), showBrowser: false, verbose: false })
+    const r = await scraper.triggerTwoFactorAuth(phoneNumber)
+    if (!r || r.success === false) {
+      return { success: false, errorMessage: friendlyOneZeroError(r?.errorMessage) || 'שליחת קוד ה-SMS נכשלה' }
+    }
+    onezeroOtpSessions.set(account.id, { scraper, createdAt: Date.now() })
+    return { success: true }
+  } catch (err) {
+    console.error('[onezero] triggerTwoFactorAuth failed:', err.message)
+    return { success: false, errorMessage: friendlyOneZeroError(err.message) }
+  }
+}
+
+/**
+ * Step 2: verify the SMS code, obtain the long-term token, and store it in the
+ * account's credentials so future scrapes need no OTP.
+ * @returns {Promise<{success:boolean, errorMessage?:string}>}
+ */
+export async function oneZeroVerifyOtp(account, otpCode) {
+  const session = onezeroOtpSessions.get(account.id)
+  if (!session) return { success: false, errorMessage: 'תוקף הבקשה פג — התחל מחדש את החיבור ב-SMS' }
+  const code = String(otpCode || '').trim()
+  if (!code) return { success: false, errorMessage: 'הזן את קוד ה-SMS' }
+
+  try {
+    const r = await session.scraper.getLongTermTwoFactorToken(code)
+    if (!r || r.success === false || !r.longTermTwoFactorAuthToken) {
+      return { success: false, errorMessage: friendlyOneZeroError(r?.errorMessage) || 'קוד שגוי או שפג תוקפו' }
+    }
+    // Merge the long-term token into the stored credentials (re-encrypt).
+    let credentials = JSON.parse(decrypt(account.credentials))
+    credentials.otpLongTermToken = r.longTermTwoFactorAuthToken
+    getDb().prepare(`UPDATE accounts SET credentials = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(encrypt(JSON.stringify(credentials)), account.id)
+    credentials = null
+    onezeroOtpSessions.delete(account.id)
+    logActivity('onezero_linked', account.source, `account ${account.id}`)
+    return { success: true }
+  } catch (err) {
+    console.error('[onezero] getLongTermTwoFactorToken failed:', err.message)
+    return { success: false, errorMessage: friendlyOneZeroError(err.message) }
+  }
 }

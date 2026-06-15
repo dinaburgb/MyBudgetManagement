@@ -5,7 +5,7 @@
 import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
-import { scrapeAccount } from '../scrapers/scraper.js'
+import { scrapeAccount, oneZeroStartOtp, oneZeroVerifyOtp } from '../scrapers/scraper.js'
 
 const router = Router()
 
@@ -50,6 +50,30 @@ router.post('/account/:id', async (req, res) => {
   }
 
   res.json({ message: 'Scrape complete', stats: result.stats })
+})
+
+/**
+ * POST /api/scrape/onezero/start — send a OneZero SMS code to the account's phone.
+ * Body: { accountId }.
+ */
+router.post('/onezero/start', async (req, res) => {
+  const account = getDb().prepare(`SELECT * FROM accounts WHERE id = ?`).get(req.body.accountId)
+  if (!account) return res.status(404).json({ error: 'Account not found' })
+  const r = await oneZeroStartOtp(account)
+  if (!r.success) return res.status(400).json({ error: r.errorMessage })
+  res.json({ status: 'otp_sent' })
+})
+
+/**
+ * POST /api/scrape/onezero/verify — verify the SMS code and store the long-term
+ * token so future scrapes need no OTP. Body: { accountId, code }.
+ */
+router.post('/onezero/verify', async (req, res) => {
+  const account = getDb().prepare(`SELECT * FROM accounts WHERE id = ?`).get(req.body.accountId)
+  if (!account) return res.status(404).json({ error: 'Account not found' })
+  const r = await oneZeroVerifyOtp(account, req.body.code)
+  if (!r.success) return res.status(400).json({ error: r.errorMessage })
+  res.json({ status: 'linked' })
 })
 
 /**
