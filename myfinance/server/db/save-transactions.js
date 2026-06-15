@@ -67,7 +67,7 @@ function pickCategory(txn, matched) {
  * @param {object} account   - the account row from our DB (id, source, owner, ...)
  * @param {object} scrapedAccount - { accountNumber, balance, txns: [...] }
  * @param {object} [dbOverride] - optional DB connection (used by tests)
- * @returns {object} stats { inserted, updated, skipped }
+ * @returns {object} stats { inserted, updated, skipped, removedPending }
  */
 export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
   const db = dbOverride || getDb()
@@ -110,7 +110,7 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
     WHERE id = @id
   `)
 
-  let inserted = 0, updated = 0, skipped = 0
+  let inserted = 0, updated = 0, skipped = 0, removedPending = 0
 
   // Track how many times each content hash appears within THIS import, so that
   // genuinely identical transactions on the same day (same amount/description)
@@ -119,11 +119,22 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
   // still dedup correctly.
   const occurrence = new Map()
 
+  // Every dedup_key present in THIS import, used to reconcile pending rows below.
+  const seenKeys = new Set()
+
   // Wrap in a transaction for speed and atomicity.
   // node:sqlite has no .transaction() helper, so we use explicit BEGIN/COMMIT.
   db.exec('BEGIN')
   try {
     for (const txn of txns) {
+      // Skip zero-amount pending "pre-authorization" holds. Some cards (notably
+      // Max) return a temporary pending row with chargedAmount 0 and no identifier
+      // for a recent purchase; the real charge arrives later as a separate
+      // completed record with a different date/amount, so the hold never
+      // reconciles against it (the content hash differs) and would linger forever.
+      // It carries no value, so drop it on import.
+      if (txn.status === 'pending' && Number(txn.chargedAmount) === 0) { skipped++; continue }
+
       const baseHash = computeContentHash(
         account.source, accountNumber, txn.date, txn.chargedAmount,
         txn.description, txn.originalCurrency,
@@ -131,6 +142,7 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
       const occ = occurrence.get(baseHash) || 0
       occurrence.set(baseHash, occ + 1)
       const dedupKey = `${baseHash}:${occ}`
+      seenKeys.add(dedupKey)
       const existing = findStmt.get(dedupKey)
 
       const row = {
@@ -184,13 +196,41 @@ export function saveAccountTransactions(account, scrapedAccount, dbOverride) {
         skipped++  // already have this transaction, nothing changed
       }
     }
+
+    // Reconcile pending rows. A pending transaction is temporary: the bank reports
+    // it while it's unsettled and stops reporting it once it settles (it returns as
+    // a separate completed row) or it's canceled. So any pending row we still hold
+    // for this account/sub-account that this import did NOT return — and that falls
+    // within the date range this import covered — has resolved one way or another;
+    // remove it so a hold (e.g. a ₪300 fuel pre-auth) doesn't linger beside the
+    // real charge. Works for any card, regardless of amount or identifier.
+    //
+    // Guards: only when the import actually returned transactions (an empty result
+    // is usually a scrape error, not "everything settled"), and only at/after the
+    // earliest scraped date so pending rows older than this scrape's window are
+    // left untouched. A pending row wrongly removed re-appears on the next scrape.
+    if (txns.length > 0) {
+      const minDate = txns.map(t => (t.date || '').slice(0, 10)).filter(Boolean).sort()[0]
+      if (minDate) {
+        const candidates = db.prepare(`
+          SELECT id, dedup_key FROM transactions
+          WHERE account_id = ? AND status = 'pending' AND date >= ?
+            AND ((? IS NULL AND account_number IS NULL) OR account_number = ?)
+        `).all(account.id, minDate, accountNumber ?? null, accountNumber ?? null)
+        const del = db.prepare(`DELETE FROM transactions WHERE id = ?`)
+        for (const c of candidates) {
+          if (!seenKeys.has(c.dedup_key)) { del.run(c.id); removedPending++ }
+        }
+      }
+    }
+
     db.exec('COMMIT')
   } catch (err) {
     db.exec('ROLLBACK')
     throw err
   }
 
-  return { inserted, updated, skipped }
+  return { inserted, updated, skipped, removedPending }
 }
 
 /**

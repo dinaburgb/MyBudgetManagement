@@ -150,6 +150,87 @@ test('pending becomes completed updates same row (no duplicate)', () => {
   assert.strictEqual(rows[0].status, 'completed')  // now completed
 })
 
+test('zero-amount pending holds (Max pre-auth) are skipped, real charge kept', () => {
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '8927', txns: [
+    // Max pre-authorization hold: pending, amount 0, no identifier — should be dropped.
+    txn({ identifier: undefined, status: 'pending', date: '2026-06-12T00:00:00.000Z',
+          originalAmount: 0, chargedAmount: 0, description: 'מעדנית אברהמי' }),
+    // The real settled charge for the same purchase — must be kept.
+    txn({ identifier: 'R1', status: 'completed', date: '2026-06-11T00:00:00.000Z',
+          originalAmount: -94.3, chargedAmount: -94.3, description: 'מעדנית אברהמי' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 1)
+  assert.strictEqual(stats.skipped, 1)
+  const rows = db.prepare('SELECT amount, status FROM transactions').all()
+  assert.strictEqual(rows.length, 1)
+  assert.strictEqual(rows[0].amount, -94.3)
+  assert.strictEqual(rows[0].status, 'completed')
+})
+
+test('a non-zero pending charge is still kept (real upcoming charge)', () => {
+  const db = freshDb()
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ identifier: 'U1', status: 'pending', chargedAmount: -50, description: 'GAS' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 1)
+  assert.strictEqual(stats.skipped, 0)
+})
+
+test('a non-zero pending hold is removed once it settles as a different charge', () => {
+  const db = freshDb()
+  // A ₪300 fuel pre-authorization hold (pending), no identifier.
+  saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ status: 'pending', date: '2026-06-13T00:00:00.000Z', chargedAmount: -300, description: 'פז יילו' }),
+  ] }, db)
+  // Next scrape: the real charge settled for a different amount/date and the hold
+  // is no longer reported.
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ status: 'completed', date: '2026-06-12T00:00:00.000Z', chargedAmount: -247, description: 'פז יילו' }),
+  ] }, db)
+  assert.strictEqual(stats.inserted, 1)
+  assert.strictEqual(stats.removedPending, 1)        // stale hold cleaned up
+  const rows = db.prepare('SELECT amount, status FROM transactions').all()
+  assert.strictEqual(rows.length, 1)
+  assert.strictEqual(rows[0].amount, -247)
+  assert.strictEqual(rows[0].status, 'completed')
+})
+
+test('a pending row still reported on the next scrape is kept', () => {
+  const db = freshDb()
+  const data = { accountNumber: '123', txns: [
+    txn({ status: 'pending', date: '2026-06-13T00:00:00.000Z', chargedAmount: -300, description: 'פז יילו' }),
+  ] }
+  saveAccountTransactions(account, data, db)
+  const stats = saveAccountTransactions(account, data, db)   // same hold, still pending
+  assert.strictEqual(stats.removedPending, 0)
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 1)
+})
+
+test('an empty scrape result does not delete existing pending rows', () => {
+  const db = freshDb()
+  saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ status: 'pending', chargedAmount: -50, description: 'GAS' }),
+  ] }, db)
+  const stats = saveAccountTransactions(account, { accountNumber: '123', txns: [] }, db)
+  assert.strictEqual(stats.removedPending, 0)
+  assert.strictEqual(db.prepare('SELECT COUNT(*) c FROM transactions').get().c, 1)
+})
+
+test('pending reconciliation is scoped to the account/sub-account', () => {
+  const db = freshDb()
+  // Hold on sub-account 123…
+  saveAccountTransactions(account, { accountNumber: '123', txns: [
+    txn({ status: 'pending', date: '2026-06-13T00:00:00.000Z', chargedAmount: -300, description: 'פז יילו' }),
+  ] }, db)
+  // …a scrape of a DIFFERENT sub-account must not touch it.
+  const stats = saveAccountTransactions(account, { accountNumber: '999', txns: [
+    txn({ status: 'completed', date: '2026-06-13T00:00:00.000Z', chargedAmount: -10, description: 'OTHER' }),
+  ] }, db)
+  assert.strictEqual(stats.removedPending, 0)
+  assert.strictEqual(db.prepare(`SELECT COUNT(*) c FROM transactions WHERE account_number='123'`).get().c, 1)
+})
+
 test('stores raw payload and installment fields', () => {
   const db = freshDb()
   saveAccountTransactions(account, { accountNumber: '123', txns: [
