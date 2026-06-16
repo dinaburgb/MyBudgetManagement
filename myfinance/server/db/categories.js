@@ -115,7 +115,7 @@ export function excludedCategoryNames(db = getDb()) {
 }
 
 /** Add a new category. Throws { code } on bad input or a duplicate name. */
-export function addCategory(db, name, color) {
+export function addCategory(db, name, color, { is_income = 0, is_excluded = 0 } = {}) {
   name = (name || '').trim()
   if (!name) throw Object.assign(new Error('name required'), { code: 'INVALID' })
   if (db.prepare(`SELECT 1 FROM categories WHERE name = ?`).get(name)) {
@@ -124,8 +124,8 @@ export function addCategory(db, name, color) {
   const agg = db.prepare(`SELECT MAX(sort_order) AS m, COUNT(*) AS c FROM categories`).get()
   const col = color || PALETTE[agg.c % PALETTE.length]
   const r = db.prepare(
-    `INSERT INTO categories (name, color, is_system, sort_order) VALUES (?, ?, 0, ?)`
-  ).run(name, col, (agg.m || 0) + 1)
+    `INSERT INTO categories (name, color, is_system, is_income, is_excluded, sort_order) VALUES (?, ?, 0, ?, ?, ?)`
+  ).run(name, col, is_income ? 1 : 0, is_excluded ? 1 : 0, (agg.m || 0) + 1)
   return { id: r.lastInsertRowid }
 }
 
