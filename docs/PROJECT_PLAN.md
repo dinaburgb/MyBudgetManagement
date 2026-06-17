@@ -326,6 +326,21 @@ Status of each bank / card integration:
     `monthlyBudgetSummary` in `db/budgets.js`, `GET /api/budgets/monthly-summary`,
     `MonthlySummaryTable` in `BudgetsPage.jsx` (actual on top, budget muted below).
   - Tests: `tests/test_budgets.js` now 16 (monthly roll-up).
+- **Compare page: monthly matrix + quick-select + income/net + averages (2026-06-17):**
+  - New `GET /api/stats/matrix` (in `routes/stats.js`): per-month per-category
+    expense breakdown plus per-month `income` and `net` (income − expenses) for a
+    free set of months and accounts. Income categories and excluded categories are
+    kept out of the expense rows (same rules as the Overview).
+  - `ComparePage.jsx` matrix table at the top: categories as rows, every selected
+    month as a column. Month headers are colour-coded (blue = period A,
+    grey = period B, purple = both). Clicking a category row expands the
+    transactions behind it inline (reuses `GET /api/stats/transactions`).
+  - Footer rows per month: total expenses (סה"כ הוצאות), income (הכנסות) and
+    net (נטו, green/red by sign).
+  - Trailing summary column (far left in RTL, "ממוצע / סה\"כ"): per-category
+    average per month in the data rows, grand total in the footer rows.
+  - `PeriodPicker` quick-select: "all" (הכל), "clear" (נקה) and per-year buttons,
+    on top of the existing month chips and presets.
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
