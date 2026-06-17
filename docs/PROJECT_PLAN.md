@@ -34,8 +34,8 @@ Status of each bank / card integration:
 - Phase 1 (foundation: auth, DB, accounts, transactions UI) — done
 - Phase 2 (scraping, deduplication, save to DB) — done
 - Security review + CORS lockdown to localhost only — done
-- **Visa Cal connected (2026-06-12):** first sync imported 87 transactions on card 7364
-  (8 additional cards under the same login returned no transactions).
+- **Visa Cal connected (2026-06-12):** first sync imported transactions successfully
+  (multiple cards under the same login were tested).
 - **Expense categories (2026-06-12):** keyword-rule auto-categorization engine
   (`server/db/categorize.js`), Categories management page (rules + re-categorize +
   per-category summary), category filter on the Transactions page, and category
@@ -162,7 +162,7 @@ Status of each bank / card integration:
 - **Multi-filters, master-password change/reset, disclaimer (2026-06-13):**
   - Transactions filters for owner / category / account are now multi-select
     (`client/src/MultiSelect.jsx`); the owners list is derived from the accounts
-    (no hardcoded Boris/Irena/Joint). Server `/api/transactions` accepts
+    (no hardcoded owner names). Server `/api/transactions` accepts
     comma-separated `owner`, `category`, `account_id` (built as `IN (...)`).
   - Master (app) password: `POST /api/auth/change-password` re-encrypts all stored
     bank credentials under the new key (`changeMasterPassword`); `POST /api/auth/reset`
