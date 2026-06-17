@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ChevronRight } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 import { useCategories } from '../CategoriesContext.jsx'
@@ -8,7 +8,6 @@ import { useCategories } from '../CategoriesContext.jsx'
 const HE_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יוני', 'יולי', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
 function monthShort(key) { const [y, m] = key.split('-'); return `${HE_SHORT[+m - 1]} ${y.slice(2)}` }
 
-// Month keys offset from the current month: offset 0 = this month, 1 = last month…
 function monthsBack(offset, count) {
   const out = []
   const d = new Date()
@@ -44,7 +43,6 @@ function ChartTooltip({ active, payload, label }) {
   )
 }
 
-// A compact multi-select of months for one period.
 function PeriodPicker({ label, chips, selected, onToggle }) {
   return (
     <div>
@@ -65,17 +63,155 @@ function PeriodPicker({ label, chips, selected, onToggle }) {
   )
 }
 
+// Inline transactions list shown when a category row is expanded
+function TxnList({ category, months, accounts }) {
+  const [rows, setRows] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    const acc = [...accounts].join(',')
+    const mStr = months.join(',')
+    axios.get('/api/stats/transactions', { params: { category, months: mStr, accounts: acc } })
+      .then(r => setRows(r.data.rows))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false))
+  }, [category, months, accounts])
+
+  if (loading) return <div className="text-gray-500 text-xs py-2 px-3">טוען...</div>
+  if (!rows?.length) return <div className="text-gray-500 text-xs py-2 px-3">אין עסקאות</div>
+
+  return (
+    <table className="w-full text-xs">
+      <tbody>
+        {rows.map(t => (
+          <tr key={t.id} className="border-b border-gray-800/30 hover:bg-gray-800/20">
+            <td className="py-1.5 pl-3 text-gray-500 whitespace-nowrap w-20">{t.date}</td>
+            <td className="py-1.5 text-gray-300 max-w-0" style={{ width: '100%' }}>
+              <span className="block truncate" dir="auto">{t.description}</span>
+              {t.account_name && (
+                <span className="text-gray-600 text-[10px]">{t.account_name}</span>
+              )}
+            </td>
+            <td className={`py-1.5 pr-3 font-mono whitespace-nowrap text-right ${t.amount < 0 ? 'text-red-400' : 'text-green-400'}`}>
+              {t.amount < 0 ? '' : '+'}{ils(Math.abs(t.amount))}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+// Matrix table: months as columns, categories as rows, with expand-to-transactions
+function MatrixTable({ matrixData, months, periodA, periodB, accounts }) {
+  const { colorFor } = useCategories()
+  const [expanded, setExpanded] = useState(new Set())
+
+  function toggleRow(cat) {
+    setExpanded(prev => {
+      const n = new Set(prev)
+      n.has(cat) ? n.delete(cat) : n.add(cat)
+      return n
+    })
+  }
+
+  if (!matrixData) return null
+  const { rows, totals } = matrixData
+
+  return (
+    <div className="bg-gray-900 rounded-xl overflow-x-auto mb-6">
+      <table className="w-full text-xs min-w-max">
+        <thead>
+          <tr className="border-b border-gray-700">
+            <th className="text-right py-3 px-3 font-medium text-gray-400 sticky right-0 bg-gray-900 min-w-[9rem]">
+              קטגוריה
+            </th>
+            {months.map(m => (
+              <th key={m} className="text-center py-3 px-2 font-medium whitespace-nowrap min-w-[6rem]">
+                <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                  periodA.has(m) && periodB.has(m)
+                    ? 'bg-purple-800/60 text-purple-200'
+                    : periodA.has(m)
+                    ? 'bg-blue-800/60 text-blue-200'
+                    : 'bg-gray-700/60 text-gray-300'
+                }`}>
+                  {monthShort(m)}
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => {
+            const isOpen = expanded.has(row.category)
+            return [
+              <tr key={row.category}
+                onClick={() => toggleRow(row.category)}
+                className="border-b border-gray-800/40 hover:bg-gray-800/30 cursor-pointer transition-colors">
+                <td className="py-2 px-3 sticky right-0 bg-gray-900 hover:bg-gray-800/30">
+                  <div className="flex items-center gap-1.5">
+                    {isOpen
+                      ? <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />}
+                    <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: colorFor(row.category) }} />
+                    <span className="text-white font-medium">{row.category}</span>
+                  </div>
+                </td>
+                {months.map(m => {
+                  const val = row.byMonth[m] || 0
+                  return (
+                    <td key={m} className="py-2 px-2 text-center font-mono text-gray-300">
+                      {val ? ils(val) : <span className="text-gray-700">—</span>}
+                    </td>
+                  )
+                })}
+              </tr>,
+
+              isOpen && (
+                <tr key={`${row.category}-txn`} className="border-b border-gray-800">
+                  <td colSpan={months.length + 1} className="bg-gray-950/60 py-1">
+                    <TxnList
+                      category={row.category}
+                      months={months}
+                      accounts={accounts}
+                    />
+                  </td>
+                </tr>
+              )
+            ]
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-gray-700">
+            <td className="py-2.5 px-3 text-gray-300 font-bold sticky right-0 bg-gray-900">סה"כ</td>
+            {months.map(m => (
+              <td key={m} className="py-2.5 px-2 text-center font-mono font-bold text-white">
+                {ils(totals[m] || 0)}
+              </td>
+            ))}
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
 export default function ComparePage() {
   const { names, colorFor } = useCategories()
   const chips = useMemo(() => recentChips(18), [])
   const [accounts, setAccounts] = useState([])
   const [selAccounts, setSelAccounts] = useState(null)
-  const [periodA, setPeriodA] = useState(() => new Set(monthsBack(0, 2)))   // last 2 months
-  const [periodB, setPeriodB] = useState(() => new Set(monthsBack(2, 2)))   // the 2 before
-  const [focus, setFocus] = useState('')                                     // '' = all categories
+  const [periodA, setPeriodA] = useState(() => new Set(monthsBack(0, 2)))
+  const [periodB, setPeriodB] = useState(() => new Set(monthsBack(2, 2)))
+  const [focus, setFocus] = useState('')
   const [dataA, setDataA] = useState(null)
   const [dataB, setDataB] = useState(null)
+  const [matrixData, setMatrixData] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  // All months from both periods, sorted
+  const allMonths = useMemo(() => [...new Set([...periodA, ...periodB])].sort(), [periodA, periodB])
 
   useEffect(() => {
     axios.get('/api/accounts').then(res => {
@@ -89,11 +225,13 @@ export default function ComparePage() {
     setLoading(true)
     const acc = [...selAccounts].join(',')
     const get = months => axios.get('/api/stats/overview', { params: { months: [...months].sort().join(','), accounts: acc } }).then(r => r.data)
-    Promise.all([get(periodA), get(periodB)])
-      .then(([a, b]) => { setDataA(a); setDataB(b) })
-      .catch(() => { setDataA(null); setDataB(null) })
+    const getMatrix = () => axios.get('/api/stats/matrix', { params: { months: allMonths.join(','), accounts: acc } }).then(r => r.data)
+
+    Promise.all([get(periodA), get(periodB), getMatrix()])
+      .then(([a, b, matrix]) => { setDataA(a); setDataB(b); setMatrixData(matrix) })
+      .catch(() => { setDataA(null); setDataB(null); setMatrixData(null) })
       .finally(() => setLoading(false))
-  }, [periodA, periodB, selAccounts])
+  }, [periodA, periodB, selAccounts, allMonths])
 
   function toggle(setter) {
     return key => setter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })
@@ -106,7 +244,6 @@ export default function ComparePage() {
     setPeriodB(new Set(monthsBack(countA, countB)))
   }
 
-  // Build comparison rows
   const aMap = new Map((dataA?.byCategory || []).map(c => [c.category, c.expenses]))
   const bMap = new Map((dataB?.byCategory || []).map(c => [c.category, c.expenses]))
   let cats = [...new Set([...aMap.keys(), ...bMap.keys()])]
@@ -121,14 +258,13 @@ export default function ComparePage() {
   const totalB = rows.reduce((s, r) => s + r.b, 0)
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-5xl">
       <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
         <ArrowLeftRight className="w-5 h-5" /> השוואת תקופות
       </h2>
 
       {/* Controls */}
       <div className="bg-gray-900 rounded-xl p-4 mb-6 space-y-4">
-        {/* presets + focus */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-gray-400 ml-1">השוואה מהירה:</span>
           <button onClick={() => preset(1, 1)} className="px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs text-gray-200">חודש מול חודש קודם</button>
@@ -165,75 +301,90 @@ export default function ComparePage() {
 
       {loading ? (
         <div className="text-gray-400">טוען נתונים...</div>
-      ) : rows.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">אין נתונים להשוואה.</div>
       ) : (
         <>
-          {/* Totals */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-gray-900 rounded-xl p-4">
-              <div className="text-gray-400 text-xs">תקופה א'</div>
-              <div className="text-lg font-bold text-blue-400 font-mono">{ils(totalA)}</div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-4">
-              <div className="text-gray-400 text-xs">תקופה ב'</div>
-              <div className="text-lg font-bold text-gray-300 font-mono">{ils(totalB)}</div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-4">
-              <div className="text-gray-400 text-xs">שינוי</div>
-              <div className={`text-lg font-bold font-mono ${totalA - totalB > 0 ? 'text-red-400' : 'text-green-400'}`}>
-                {totalA - totalB > 0 ? '+' : ''}{ils(totalA - totalB)}
+          {/* Matrix table */}
+          {matrixData && allMonths.length > 0 && (
+            <MatrixTable
+              matrixData={matrixData}
+              months={allMonths}
+              periodA={periodA}
+              periodB={periodB}
+              accounts={selAccounts || new Set()}
+            />
+          )}
+
+          {rows.length === 0 ? (
+            <div className="text-center py-16 text-gray-500">אין נתונים להשוואה.</div>
+          ) : (
+            <>
+              {/* Totals */}
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-gray-900 rounded-xl p-4">
+                  <div className="text-gray-400 text-xs">תקופה א'</div>
+                  <div className="text-lg font-bold text-blue-400 font-mono">{ils(totalA)}</div>
+                </div>
+                <div className="bg-gray-900 rounded-xl p-4">
+                  <div className="text-gray-400 text-xs">תקופה ב'</div>
+                  <div className="text-lg font-bold text-gray-300 font-mono">{ils(totalB)}</div>
+                </div>
+                <div className="bg-gray-900 rounded-xl p-4">
+                  <div className="text-gray-400 text-xs">שינוי</div>
+                  <div className={`text-lg font-bold font-mono ${totalA - totalB > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                    {totalA - totalB > 0 ? '+' : ''}{ils(totalA - totalB)}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          {/* Grouped bar chart */}
-          <div className="bg-gray-900 rounded-xl p-5 mb-6">
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chart} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-                <XAxis dataKey="category" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={false} tickLine={false} width={70} tickFormatter={v => ils(v)} />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: '#ffffff08' }} />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                <Bar dataKey="תקופה א" fill="#60a5fa" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="תקופה ב" fill="#6b7280" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              {/* Grouped bar chart */}
+              <div className="bg-gray-900 rounded-xl p-5 mb-6">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chart} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
+                    <XAxis dataKey="category" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickLine={false} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={false} tickLine={false} width={70} tickFormatter={v => ils(v)} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: '#ffffff08' }} />
+                    <Legend wrapperStyle={{ fontSize: 13 }} />
+                    <Bar dataKey="תקופה א" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="תקופה ב" fill="#6b7280" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
 
-          {/* Comparison table */}
-          <div className="bg-gray-900 rounded-xl p-5">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-gray-400 border-b border-gray-800">
-                  <th className="text-right py-2 font-medium">קטגוריה</th>
-                  <th className="text-left py-2 font-medium">תקופה א'</th>
-                  <th className="text-left py-2 font-medium">תקופה ב'</th>
-                  <th className="text-left py-2 font-medium">שינוי</th>
-                  <th className="text-left py-2 font-medium">%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(r => (
-                  <tr key={r.category} className="border-b border-gray-800/50">
-                    <td className="py-2 text-white">
-                      <span className="inline-block w-2.5 h-2.5 rounded-full ml-2 align-middle" style={{ background: colorFor(r.category) }} />
-                      {r.category}
-                    </td>
-                    <td className="py-2 text-left font-mono text-blue-400">{ils(r.a)}</td>
-                    <td className="py-2 text-left font-mono text-gray-300">{ils(r.b)}</td>
-                    <td className={`py-2 text-left font-mono ${r.diff > 0 ? 'text-red-400' : r.diff < 0 ? 'text-green-400' : 'text-gray-500'}`}>
-                      {r.diff > 0 ? '+' : ''}{ils(r.diff)}
-                    </td>
-                    <td className={`py-2 text-left font-mono ${r.diff > 0 ? 'text-red-400' : r.diff < 0 ? 'text-green-400' : 'text-gray-500'}`}>
-                      {r.pct == null ? '—' : `${r.pct > 0 ? '+' : ''}${Math.round(r.pct)}%`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              {/* Comparison table */}
+              <div className="bg-gray-900 rounded-xl p-5">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-800">
+                      <th className="text-right py-2 font-medium">קטגוריה</th>
+                      <th className="text-left py-2 font-medium">תקופה א'</th>
+                      <th className="text-left py-2 font-medium">תקופה ב'</th>
+                      <th className="text-left py-2 font-medium">שינוי</th>
+                      <th className="text-left py-2 font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => (
+                      <tr key={r.category} className="border-b border-gray-800/50">
+                        <td className="py-2 text-white">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full ml-2 align-middle" style={{ background: colorFor(r.category) }} />
+                          {r.category}
+                        </td>
+                        <td className="py-2 text-left font-mono text-blue-400">{ils(r.a)}</td>
+                        <td className="py-2 text-left font-mono text-gray-300">{ils(r.b)}</td>
+                        <td className={`py-2 text-left font-mono ${r.diff > 0 ? 'text-red-400' : r.diff < 0 ? 'text-green-400' : 'text-gray-500'}`}>
+                          {r.diff > 0 ? '+' : ''}{ils(r.diff)}
+                        </td>
+                        <td className={`py-2 text-left font-mono ${r.diff > 0 ? 'text-red-400' : r.diff < 0 ? 'text-green-400' : 'text-gray-500'}`}>
+                          {r.pct == null ? '—' : `${r.pct > 0 ? '+' : ''}${Math.round(r.pct)}%`}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

@@ -183,6 +183,76 @@ router.get('/overview', (req, res) => {
 })
 
 /**
+ * GET /api/stats/matrix?months=2026-01,2026-02,2026-03&accounts=1,3
+ * Per-month, per-category expense breakdown for the comparison matrix table.
+ * Returns only expense categories (income and excluded categories are omitted).
+ *
+ * Response:
+ *   {
+ *     months: ['2026-01', ...],
+ *     rows: [{ category, byMonth: { '2026-01': 1234, ... } }],   // sorted by total desc
+ *     totals: { '2026-01': 1234, ... }
+ *   }
+ */
+router.get('/matrix', (req, res) => {
+  const db = getDb()
+  const { months, accountIds } = resolveSelection(db, req)
+  const incomeSet = new Set(incomeCategoryNames(db))
+  const excludedSet = new Set(excludedCategoryNames(db))
+
+  if (accountIds.length === 0) {
+    const empty = Object.fromEntries(months.map(m => [m, 0]))
+    return res.json({ months, rows: [], totals: empty })
+  }
+
+  const mP = months.map(() => '?').join(',')
+  const aP = accountIds.map(() => '?').join(',')
+  const excludedCats = [...excludedSet]
+  const catClause = excludedCats.length
+    ? `AND category NOT IN (${excludedCats.map(() => '?').join(',')})`
+    : ''
+
+  const raw = db.prepare(`
+    SELECT category, substr(date, 1, 7) AS month,
+           SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS expenses
+    FROM transactions
+    WHERE substr(date, 1, 7) IN (${mP})
+      AND account_id IN (${aP})
+      AND ${NOT_EXCLUDED}
+      AND is_transfer = 0
+      ${catClause}
+    GROUP BY category, month
+    HAVING expenses > 0
+    ORDER BY category, month
+  `).all(...months, ...accountIds, ...excludedCats)
+
+  // Group by category, filter out income categories
+  const catMap = new Map()
+  for (const r of raw) {
+    if (incomeSet.has(r.category)) continue
+    if (!catMap.has(r.category)) catMap.set(r.category, {})
+    catMap.get(r.category)[r.month] = r.expenses
+  }
+
+  const rows = [...catMap.entries()]
+    .map(([category, byMonth]) => ({
+      category,
+      byMonth,
+      total: Object.values(byMonth).reduce((s, v) => s + v, 0),
+    }))
+    .sort((a, b) => b.total - a.total)
+
+  const totals = Object.fromEntries(months.map(m => [m, 0]))
+  for (const row of rows) {
+    for (const [m, v] of Object.entries(row.byMonth)) {
+      totals[m] = (totals[m] || 0) + v
+    }
+  }
+
+  res.json({ months, rows: rows.map(({ category, byMonth }) => ({ category, byMonth })), totals })
+})
+
+/**
  * GET /api/stats/transactions?category=..&months=..&accounts=..
  * The transactions behind a chart slice: a category within the selected months
  * and accounts, newest first. Used by the Overview pie drill-down.
