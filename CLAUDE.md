@@ -19,7 +19,8 @@
 - Periodically suggest to update the docs/PROJECT_PLAN.md file
 
 ## Communication Rules
-- **All explanations, summaries, and messages to the user must be in Hebrew only — no English words**
+- **Reply to the user in the same language they used in their message (Hebrew, Russian, or English)**
+- If the user switches language mid-conversation, switch with them
 - מונחים טכניים שאין להם תרגום (כגון שמות קבצים, שמות פונקציות, ערכים בקוד) — מותר לציינם כמות שהם
 - בקוד עצמו — ניתן להשתמש באנגלית (שמות משתנים, הערות טכניות); ההגבלה חלה רק על הטקסט שנכתב למשתמש
 

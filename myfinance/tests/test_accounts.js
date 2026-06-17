@@ -16,7 +16,7 @@ function test(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message}`) }
 }
 
-const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Boris' }
+const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Me' }
 
 function txn(over = {}) {
   return {
@@ -29,7 +29,7 @@ function txn(over = {}) {
 function seed() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Cal','cal','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Cal','cal','Me','x',1)`).run()
   saveAccountTransactions(account, { accountNumber: '7364', txns: [
     txn({ description: 'a', chargedAmount: -100 }),
     txn({ description: 'b', chargedAmount: -50, date: '2026-06-02T00:00:00.000Z' }),
@@ -72,8 +72,8 @@ test('clean (withData) removes account, transactions and balances', () => {
 test('clean only affects the targeted account', () => {
   const db = seed()
   // a second account with its own transaction
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Disc','discount','Irena','x',1)`).run()
-  saveAccountTransactions({ id: 2, name: 'Disc', source: 'discount', owner: 'Irena' },
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Disc','discount','Partner','x',1)`).run()
+  saveAccountTransactions({ id: 2, name: 'Disc', source: 'discount', owner: 'Partner' },
     { accountNumber: '999', txns: [txn({ description: 'z', chargedAmount: -10 })] }, db)
   deleteAccount(db, 1, true)
   const c = counts(db)
@@ -87,9 +87,9 @@ test('clean only affects the targeted account', () => {
 function seedThree() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (1,'A','cal','Boris','x',1)`).run()
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (2,'B','max','Boris','x',2)`).run()
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (3,'C','isracard','Boris','x',3)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (1,'A','cal','Me','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (2,'B','max','Me','x',2)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,sort_order) VALUES (3,'C','isracard','Me','x',3)`).run()
   return db
 }
 const order = db => db.prepare(`SELECT id FROM accounts ORDER BY sort_order, id`).all().map(r => r.id)

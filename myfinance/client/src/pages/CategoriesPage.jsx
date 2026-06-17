@@ -7,9 +7,11 @@ import { useCategories } from '../CategoriesContext.jsx'
 // --- Manage the category list (add / rename / recolor / delete) ---
 function CategoryManager({ onChanged }) {
   const { categories, reload } = useCategories()
-  const [newName,  setNewName]  = useState('')
-  const [newColor, setNewColor] = useState('#60a5fa')
-  const [error,    setError]    = useState('')
+  const [newName,     setNewName]     = useState('')
+  const [newColor,    setNewColor]    = useState('#60a5fa')
+  const [newIncome,   setNewIncome]   = useState(false)
+  const [newExcluded, setNewExcluded] = useState(false)
+  const [error,       setError]       = useState('')
   const [editId,   setEditId]   = useState(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('#60a5fa')
@@ -25,8 +27,13 @@ function CategoryManager({ onChanged }) {
     setError('')
     if (!newName.trim()) return
     try {
-      await axios.post('/api/categories', { name: newName.trim(), color: newColor })
+      await axios.post('/api/categories', {
+        name: newName.trim(), color: newColor,
+        is_income: newIncome, is_excluded: newExcluded,
+      })
       setNewName('')
+      setNewIncome(false)
+      setNewExcluded(false)
       refresh()
     } catch (err) {
       setError(err.response?.data?.error || 'שגיאה בהוספה')
@@ -84,6 +91,14 @@ function CategoryManager({ onChanged }) {
           placeholder="שם קטגוריה חדשה (למשל: מתנות)"
           className="flex-1 min-w-[12rem] bg-gray-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 placeholder-gray-500"
         />
+        <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none" title="קטגוריית הכנסה — לא תיכלל בעוגת ההוצאות">
+          <input type="checkbox" checked={newIncome} onChange={e => setNewIncome(e.target.checked)} className="w-3.5 h-3.5 accent-emerald-600" />
+          הכנסה
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none" title="לא נכלל בחישוב כלל (למשל הורדת כרטיס אשראי)">
+          <input type="checkbox" checked={newExcluded} onChange={e => setNewExcluded(e.target.checked)} className="w-3.5 h-3.5 accent-amber-600" />
+          לא נכלל
+        </label>
         <button type="submit" className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors">
           <Plus className="w-4 h-4" /> הוסף
         </button>

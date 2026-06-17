@@ -64,9 +64,8 @@ None.
 
 ## Low priority issues
 
-- **L1 — Owner names hardcoded.** `Boris`/`Irena` are built-in owner defaults in
-  code/UI (mild PII). Functional and an "Other" option exists. Consider making the
-  owner list user-configurable later.
+- **L1 — Owner names hardcoded.** Owner names were previously hardcoded defaults in
+  code/UI. Now derived from accounts (user-configurable). An "Other" option exists.
 - **L2 — Full account numbers shown in the post-sync breakdown** on AccountsPage.
   Local-only, the user's own data. Consider masking to the last 4 digits.
 - **L3 — Scraper logs `err.message`.** These are library/Puppeteer messages, not

@@ -12,6 +12,8 @@
 
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import os from 'node:os'
+import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { decrypt, encrypt } from '../crypto/encryption.js'
 import { getDb, backupDatabase, logActivity } from '../db/database.js'
@@ -24,6 +26,62 @@ const LOGS_DIR = path.join(__dirname, '..', '..', 'logs')
 // israeli-bank-scrapers is a CommonJS package — load it via require
 const require = createRequire(import.meta.url)
 const { createScraper, CompanyTypes } = require('israeli-bank-scrapers')
+
+/**
+ * Locate the Chrome binary that Puppeteer downloaded into its cache.
+ *
+ * Why: Puppeteer's auto-detection sometimes fails to find Chrome — most often
+ * when the Chrome .zip was only partially extracted during `npm install`
+ * (antivirus locking files, an interrupted download), so `chrome.exe` is missing
+ * or the bundled Puppeteer version no longer matches the downloaded Chrome. When
+ * that happens the scrape dies with "Could not find Chrome". By resolving the
+ * binary ourselves and passing it as `executablePath`, scraping keeps working as
+ * long as a usable Chrome exists in the cache. If none is found we return null
+ * and leave Puppeteer to its own auto-detection (no behaviour change).
+ *
+ * The companion installer (installation.bat) makes sure such a Chrome exists.
+ */
+function resolveChromePath() {
+  const cacheDir = process.env.PUPPETEER_CACHE_DIR || path.join(os.homedir(), '.cache', 'puppeteer')
+  const chromeRoot = path.join(cacheDir, 'chrome')
+  if (!fs.existsSync(chromeRoot)) return null
+
+  const binName = process.platform === 'win32' ? 'chrome.exe'
+    : process.platform === 'darwin' ? 'Google Chrome for Testing'
+    : 'chrome'
+
+  // Walk the (shallow) cache tree looking for the platform's Chrome binary,
+  // preferring the highest version folder so we use the newest install.
+  const findBinary = (dir, depth = 0) => {
+    if (depth > 4) return null
+    let entries
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return null }
+    for (const e of entries) {
+      const full = path.join(dir, e.name)
+      if (e.isFile() && e.name === binName) return full
+      if (e.isDirectory()) {
+        const hit = findBinary(full, depth + 1)
+        if (hit) return hit
+      }
+    }
+    return null
+  }
+
+  let versionDirs
+  try {
+    versionDirs = fs.readdirSync(chromeRoot, { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .sort()
+      .reverse()   // highest version first
+  } catch { return null }
+
+  for (const ver of versionDirs) {
+    const hit = findBinary(path.join(chromeRoot, ver))
+    if (hit) return hit
+  }
+  return null
+}
 
 /**
  * Map our internal source keys to the library's company identifiers.
@@ -78,10 +136,22 @@ export async function scrapeAccount(account) {
   const startDate = getStartDate(account)
   logActivity('scrape_started', account.source, `account ${account.id}`)
 
+  // Point Puppeteer at the Chrome we downloaded, when we can find it. Falls back
+  // to Puppeteer's own auto-detection if the cache lookup comes up empty.
+  const chromePath = resolveChromePath()
+  if (chromePath) {
+    console.log(`[scrape] using Chrome at ${chromePath}`)
+  } else {
+    console.warn('[scrape] Chrome not found in the Puppeteer cache — relying on auto-detection. '
+      + 'If scraping fails with "Could not find Chrome", run installation.bat to (re)install it.')
+  }
+
   const options = {
     companyId,
     startDate,
     combineInstallments: false,
+    // Use the explicitly-resolved Chrome when available (see resolveChromePath).
+    ...(chromePath ? { executablePath: chromePath } : {}),
     // Show the real browser window by default. Israeli bank sites (esp. Discount)
     // often behave differently or block headless browsers, returning UNKNOWN_ERROR.
     // Set SHOW_BROWSER=false in the environment to run headless once it's stable.

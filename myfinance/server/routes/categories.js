@@ -33,7 +33,10 @@ router.get('/', (req, res) => {
 /** POST /api/categories — add a custom category { name, color? } */
 router.post('/', (req, res) => {
   try {
-    const { id } = addCategory(getDb(), req.body.name, req.body.color)
+    const { id } = addCategory(getDb(), req.body.name, req.body.color, {
+      is_income: req.body.is_income,
+      is_excluded: req.body.is_excluded,
+    })
     res.json({ id, message: 'Category added' })
   } catch (err) {
     if (err.code === 'EXISTS')  return res.status(409).json({ error: 'הקטגוריה כבר קיימת' })

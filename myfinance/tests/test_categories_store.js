@@ -18,7 +18,7 @@ function test(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message}`) }
 }
 
-const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Boris' }
+const account = { id: 1, name: 'Cal', source: 'cal', owner: 'Me' }
 function txn(over = {}) {
   return {
     type: 'normal', date: '2026-06-01T00:00:00.000Z', processedDate: '2026-06-01T00:00:00.000Z',
@@ -29,7 +29,7 @@ function txn(over = {}) {
 function freshDb() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Cal','cal','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Cal','cal','Me','x',1)`).run()
   seedCategories(db)
   return db
 }

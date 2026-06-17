@@ -27,7 +27,7 @@ console.log('\nFinancial-asset tests:')
 
 test('create + list returns the asset with no snapshot yet', () => {
   const db = freshDb()
-  const id = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה', owner: 'Boris' })
+  const id = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה', owner: 'Me' })
   const rows = listAssets(db)
   assert.strictEqual(rows.length, 1)
   assert.strictEqual(rows[0].id, id)
@@ -61,8 +61,8 @@ test('listAssets folds in the latest snapshot', () => {
 
 test('summary totals ILS only and breaks down by type/owner', () => {
   const db = freshDb()
-  const p = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה', owner: 'Boris' })
-  const g = createAsset(db, { institution: 'מיטב', asset_type: 'קרן השתלמות', owner: 'Irena' })
+  const p = createAsset(db, { institution: 'הראל', asset_type: 'קרן פנסיה', owner: 'Me' })
+  const g = createAsset(db, { institution: 'מיטב', asset_type: 'קרן השתלמות', owner: 'Partner' })
   const ib = createAsset(db, { institution: 'אינטראקטיב ברוקרס', asset_type: 'תיק השקעות', owner: 'Joint', currency: 'USD' })
   upsertSnapshot(db, p, { snapshot_date: '2026-06-01', balance: 200000, deposits: 3000 })
   upsertSnapshot(db, g, { snapshot_date: '2026-06-01', balance: 80000, deposits: 1000 })
@@ -72,14 +72,14 @@ test('summary totals ILS only and breaks down by type/owner', () => {
   assert.strictEqual(s.totalDeposits, 4000)
   assert.strictEqual(s.count, 3)
   assert.strictEqual(s.byType.length, 2)     // only the two ILS types
-  assert.strictEqual(s.byOwner.find(o => o.key === 'Boris').total, 200000)
+  assert.strictEqual(s.byOwner.find(o => o.key === 'Me').total, 200000)
 })
 
 test('archived assets are excluded from list and summary by default', () => {
   const db = freshDb()
   const id = createAsset(db, { institution: 'פסגות', asset_type: 'קופת גמל' })
   upsertSnapshot(db, id, { snapshot_date: '2026-06-01', balance: 40000 })
-  updateAsset(db, id, { institution: 'פסגות', asset_type: 'קופת גמל', owner: 'Boris', currency: 'ILS', archived: 1 })
+  updateAsset(db, id, { institution: 'פסגות', asset_type: 'קופת גמל', owner: 'Me', currency: 'ILS', archived: 1 })
   assert.strictEqual(listAssets(db).length, 0)
   assert.strictEqual(listAssets(db, { includeArchived: true }).length, 1)
   assert.strictEqual(assetsSummary(db).total, 0)

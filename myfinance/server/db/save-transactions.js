@@ -255,7 +255,7 @@ export function insertManualTransaction(db, input) {
     description: description || '',
     memo: '',
     category: category ? normalizeCategory(category) : OTHER_CATEGORY,
-    owner: owner || 'Boris',
+    owner: owner || 'Me',
     account_id: account_id || null,
     account_number: null,
     account_name: account_name || (account_id ? null : 'מזומן'),

@@ -19,7 +19,7 @@ function test(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message}`) }
 }
 
-const account = { id: 1, name: 'Bank Discount', source: 'discount', owner: 'Boris' }
+const account = { id: 1, name: 'Bank Discount', source: 'discount', owner: 'Me' }
 
 function txn(over = {}) {
   return {
@@ -32,7 +32,7 @@ function txn(over = {}) {
 function freshDb() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank Discount','discount','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank Discount','discount','Me','x',1)`).run()
   seedCategories(db)
   // Two account numbers under the same login.
   saveAccountTransactions(account, { accountNumber: '111', txns: [txn({ chargedAmount: -200, description: 'a' })] }, db)

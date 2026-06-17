@@ -21,13 +21,13 @@ function test(name, fn) {
 function freshDb() {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_SQL)
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank A','discount','Boris','x',1)`).run()
-  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Bank B','hapoalim','Boris','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (1,'Bank A','discount','Me','x',1)`).run()
+  db.prepare(`INSERT INTO accounts (id,name,source,owner,credentials,include_in_totals) VALUES (2,'Bank B','hapoalim','Me','x',1)`).run()
   seedCategories(db)
   return db
 }
 const add = (db, account_id, amount, date, category = 'מזון') =>
-  insertManualTransaction(db, { date, description: 'x', amount, category, owner: 'Boris', account_id, account_name: `Bank ${account_id}` })
+  insertManualTransaction(db, { date, description: 'x', amount, category, owner: 'Me', account_id, account_name: `Bank ${account_id}` })
 const find = (rows, cat) => rows.find(r => r.category === cat)
 
 console.log('\nInternal-transfer tests:')

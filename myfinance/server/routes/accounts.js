@@ -89,7 +89,7 @@ router.post('/', (req, res) => {
   const result = db.prepare(`
     INSERT INTO accounts (name, source, owner, credentials, sort_order)
     VALUES (?, ?, ?, ?, ?)
-  `).run(name, source, owner || 'Boris', encrypted, nextOrder)
+  `).run(name, source, owner || 'Me', encrypted, nextOrder)
 
   res.json({ id: result.lastInsertRowid, message: 'Account saved' })
 })

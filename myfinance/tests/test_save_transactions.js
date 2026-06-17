@@ -16,7 +16,7 @@ function test(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message}`) }
 }
 
-const account = { id: 1, name: 'Discount — Boris', source: 'discount', owner: 'Boris' }
+const account = { id: 1, name: 'Discount — Me', source: 'discount', owner: 'Me' }
 
 function freshDb() {
   const db = new DatabaseSync(':memory:')
@@ -48,7 +48,7 @@ console.log('\nTransaction save & dedup tests:')
 test('insertManualTransaction adds a cash expense (no account)', () => {
   const db = freshDb()
   const id = insertManualTransaction(db, {
-    date: '2026-06-12', description: 'קנייה בשוק', amount: -80, category: 'מזון', owner: 'Boris',
+    date: '2026-06-12', description: 'קנייה בשוק', amount: -80, category: 'מזון', owner: 'Me',
   })
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
   assert.strictEqual(row.source, 'manual')
@@ -69,8 +69,8 @@ test('two identical manual entries are both kept (random dedup key)', () => {
 test('manual entry can be attached to an account', () => {
   const db = freshDb()
   const id = insertManualTransaction(db, {
-    date: '2026-06-12', description: 'הפקדה', amount: 500, owner: 'Irena',
-    account_id: 1, account_name: 'Discount — Boris',
+    date: '2026-06-12', description: 'הפקדה', amount: 500, owner: 'Partner',
+    account_id: 1, account_name: 'Discount — Me',
   })
   const row = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id)
   assert.strictEqual(row.account_id, 1)
@@ -247,7 +247,7 @@ test('owner and source come from the account', () => {
   const db = freshDb()
   saveAccountTransactions(account, { accountNumber: '123', txns: [txn({ identifier: 'O1' })] }, db)
   const row = db.prepare('SELECT owner, source FROM transactions').get()
-  assert.strictEqual(row.owner, 'Boris')
+  assert.strictEqual(row.owner, 'Me')
   assert.strictEqual(row.source, 'discount')
 })
 

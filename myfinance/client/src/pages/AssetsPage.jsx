@@ -20,8 +20,8 @@ const CATEGORIES = [
 // Suggested types when the row is a liability (a debt we owe).
 const LIABILITY_TYPES = ['הלוואת בנק', 'משכנתא', 'הלוואה חברתית', 'מסגרת אשראי']
 const OWNERS = [
-  { value: 'Boris', label: 'בוריס' },
-  { value: 'Irena', label: 'אירינה' },
+  { value: 'Me', label: 'אני' },
+  { value: 'Partner', label: 'שותף/ה' },
   { value: 'Joint', label: 'משותף' },
 ]
 const CURRENCIES = ['ILS', 'USD', 'EUR']
@@ -67,7 +67,7 @@ function ComboSelect({ value, onChange, options, placeholder }) {
   )
 }
 
-/** Owner picker: the known owners (בוריס/אירינה/משותף) plus a free-text "אחר…"
+/** Owner picker: the known owners (אני/שותף/משותף) plus a free-text "אחר…"
  *  so a new owner (e.g. a child's name) can be typed. Custom owners store the
  *  typed text as both value and label. */
 function OwnerSelect({ value, onChange }) {
@@ -80,7 +80,7 @@ function OwnerSelect({ value, onChange }) {
         onChange={e => onChange(e.target.value)}
         className={`${field} w-32 placeholder-gray-500`}
       />
-      <button type="button" onClick={() => { setCustom(false); onChange('Boris') }}
+      <button type="button" onClick={() => { setCustom(false); onChange('Me') }}
         className="text-gray-500 hover:text-white text-xs">רשימה</button>
     </div>
   ) : (
@@ -102,7 +102,7 @@ function AssetForm({ initial, defaultKind = 'asset', onSaved, onClose }) {
   const [institution, setInstitution] = useState(initial?.institution || INSTITUTIONS[0])
   const [assetType, setAssetType]     = useState(initial?.asset_type || ASSET_TYPES[0])
   const [label, setLabel]             = useState(initial?.label || '')
-  const [owner, setOwner]             = useState(initial?.owner || 'Boris')
+  const [owner, setOwner]             = useState(initial?.owner || 'Me')
   const [currency, setCurrency]       = useState(initial?.currency || 'ILS')
   const [note, setNote]               = useState(initial?.note || '')
   const [busy, setBusy] = useState(false)

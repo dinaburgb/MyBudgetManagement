@@ -31,7 +31,7 @@ const CREDENTIAL_FIELDS = {
   max:       [{ key: 'username',  label: 'שם משתמש'  }, { key: 'password', label: 'סיסמה', secret: true }],
 }
 
-const PRESET_OWNERS = ['Boris', 'Irena', 'Joint']
+const PRESET_OWNERS = ['Me', 'Partner', 'Joint']
 
 // Credit-card sources show one "account number" per card, so we word the
 // sub-account breakdown as cards rather than accounts.
@@ -41,8 +41,8 @@ const isCard = source => CARD_SOURCES.has(source)
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
   const [source, setSource] = useState(initial?.source || 'hapoalim')
-  // Owner can be a preset (Boris/Irena/Joint) or a custom name via "Other".
-  const initialOwner = initial?.owner || 'Boris'
+  // Owner can be a preset (Me/Partner/Joint) or a custom name via "Other".
+  const initialOwner = initial?.owner || 'Me'
   const initialIsPreset = PRESET_OWNERS.includes(initialOwner)
   const [ownerSelect, setOwnerSelect] = useState(initialIsPreset ? initialOwner : 'Other')
   const [customOwner, setCustomOwner] = useState(initialIsPreset ? '' : initialOwner)
@@ -132,8 +132,8 @@ function AccountForm({ initial, onSave, onCancel }) {
           onChange={e => setOwnerSelect(e.target.value)}
           className="w-full bg-gray-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="Boris">Boris</option>
-          <option value="Irena">Irena</option>
+          <option value="Me">אני</option>
+          <option value="Partner">שותף/ה</option>
           <option value="Joint">משותף</option>
           <option value="Other">אחר…</option>
         </select>

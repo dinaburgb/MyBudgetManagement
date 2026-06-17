@@ -1,60 +1,206 @@
 # MyBudgetManagement
 
-Local personal finance dashboard for private family budget management.
+A local personal finance dashboard for tracking income, expenses, and budgets — with automatic transaction import from Israeli banks and credit cards.
 
-## Current status
+All data stays on your machine. No cloud sync, no subscriptions, no accounts.
 
-Project setup stage.
+![Dashboard](docs/screenshots/dashboard.png)
 
-## Main principles
+---
 
-- Local only
-- No cloud sync
-- No real bank credentials in Git
-- SQLite local database
-- Manual update flow
+## Features
 
-## Security
+- **Automatic bank scraping** — imports transactions from Bank Discount, Hapoalim, FIBI (Beinleumi), Visa Cal, Isracard, Max, Mizrahi Tefahot, and OneZero (see [Bank Support](#bank-support))
+- **Budget tracking** — set monthly budgets per category with carryover support and visual donut tiles
+- **Auto-categorization** — 108 built-in keyword rules classify transactions automatically; edit and add your own
+- **Multi-owner support** — track spending per family member with per-account owner assignment
+- **Assets tracking** — track savings accounts, investments, real estate, and other assets alongside bank accounts
+- **Manual entry** — add transactions that don't come from a bank
+- **Transfer detection** — automatically identifies and pairs internal transfers between your accounts
+- **Month-over-month comparison** — compare spending across any two months
+- **Encrypted credentials** — bank usernames/passwords are encrypted at rest with AES-256-GCM; the master password is never stored
+- **OTP / SMS support** — enter one-time codes directly in the browser when your bank requires 2FA
+- **Full offline** — runs as a local Node.js server; no internet required after install (except for bank scraping)
 
-- The master password is never stored. A 256-bit key is derived from it (PBKDF2)
-  and held only in memory for the session.
-- Bank credentials are encrypted at rest (AES-256-GCM) under `data/` (git-ignored).
-- Decrypted credentials live only in memory during a scrape — never logged, never
-  written to disk, never returned over HTTP.
-- OTP/SMS codes are entered by the user in the browser and are never stored.
-- The browser never uses `localStorage`/`sessionStorage`.
-- `data/` and `logs/` are git-ignored. **Never commit** databases, `*.enc`/`*.bin`
-  files, logs, or the failure screenshots that may appear in `logs/`.
-- State-changing API calls (`POST/PUT/DELETE`) are rejected from cross-site
-  origins, and the WebSocket rejects unknown origins — so a random website you
-  have open can't drive the local app.
+---
 
-## Privacy model — read this
+## Bank Support
 
-**Only bank/card credentials are encrypted.** The rest of the SQLite database —
-your transactions, descriptions, categories, budgets, balances and raw scraper
-payloads — is stored **in plaintext** in `data/myfinance.db`. If that file leaks,
-someone can read your financial history (but not your bank passwords).
+| Bank / Card         | Status          | Notes                                                      |
+|---------------------|-----------------|------------------------------------------------------------|
+| Bank Discount       | ✅ Working       | Patched for the new site layout                            |
+| Bank Hapoalim       | ✅ Working       | Manual SMS/OTP in a visible browser window                 |
+| FIBI (Beinleumi)    | ✅ Working       | Deduplication by content hash                              |
+| Visa Cal            | ✅ Working       | Multi-card support                                         |
+| Mizrahi Tefahot     | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
+| Isracard            | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
+| Max                 | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
+| OneZero             | 🚫 Blocked      | Cloudflare blocks Node's TLS fingerprint; needs workaround |
 
-Therefore:
+Powered by [israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers).
 
-- **Rely on full-disk encryption** (BitLocker / FileVault / LUKS) on the machine
-  that runs this app. That is the real protection for the data file.
-- **Keep backups encrypted.** The app auto-backs up to `data/backups/` before each
-  import — that folder is just as sensitive as the DB. Don't sync it to an
-  unencrypted cloud location.
-- **Never share the working folder as-is.** It contains `data/` and `logs/`.
+---
 
-### Safe code-only export
+## Requirements
 
-To share or archive the code **without** any private data, export straight from
-git (this includes only tracked files — never `data/`, `logs/`, DB or secrets):
+- **Windows 10/11** (the `.bat` launchers are Windows-only; the Node server itself runs on any OS)
+- **Node.js 18+** — [nodejs.org](https://nodejs.org)
+- **Google Chrome** — used by the scraper (Puppeteer controls it headlessly)
+
+---
+
+## Installation
+
+### Option A — Automatic (Windows)
+
+1. Download or clone this repository.
+2. Double-click **`myfinance/installation.bat`**.
+   - It runs `npm install` inside `myfinance/`, which also installs Puppeteer and downloads a compatible Chrome build.
+3. That's it. You're ready to start.
+
+### Option B — Manual
+
+```bash
+cd myfinance
+npm install
+```
+
+---
+
+## Running the App
+
+Double-click **`myfinance/start.bat`** (or `MyBudget.bat` in the root).
+
+This starts the Node server and opens the dashboard in your default browser at `http://localhost:3000`.
+
+**First run:** you will be prompted to set a master password. This password encrypts your bank credentials. It is never stored — you must enter it each time you open the app.
+
+---
+
+## First-Time Setup
+
+1. **Set master password** on the lock screen.
+2. Go to **Accounts** → **Add account** for each bank/card you want to track.
+   - Enter the institution (e.g. `discount`, `hapoalim`, `cal`), your username, and password.
+   - Credentials are encrypted immediately and stored in `data/credentials.enc`.
+3. Go to **Accounts** → click **Sync** to import transactions for the first time.
+   - For banks that require SMS/OTP: a browser window will open — enter the code when prompted.
+4. Go to **Categories** to review and adjust the auto-assigned categories.
+5. Go to **Budgets** to set monthly spending limits per category.
+
+---
+
+## Usage Guide
+
+### Dashboard
+
+The main screen shows:
+- **Budget tiles** — each category as a donut with spent vs. budget; color turns red when over budget.
+- **Monthly summary** — total income, expenses, and net for the current month.
+- **Recent transactions** — the last 20 transactions across all accounts.
+
+### Transactions
+
+- Filter by date range, owner, category, or account.
+- Click a category cell to re-assign the category; optionally turn it into a permanent rule.
+- Add notes to individual transactions.
+- Manually add a transaction with the **+ Add** button.
+
+### Accounts
+
+- Add, edit, or remove bank/card connections.
+- Toggle **Include in totals** to exclude an account from budget and overview calculations (useful for investment accounts).
+- **Sync** button triggers a fresh scrape for that account.
+
+### Assets
+
+Track non-bank assets (real estate, savings plans, investments). Enter current value manually; history is kept automatically.
+
+### Budgets
+
+- Set a monthly budget per category.
+- Enable **carryover** to roll unused budget into the next month.
+- Mark a category as **income** to flip it in the net calculation.
+
+### Categories
+
+- Edit auto-categorization rules (keyword → category mappings).
+- **Re-categorize all** applies updated rules to your entire transaction history.
+
+### Compare
+
+Side-by-side view of spending by category for any two months.
+
+---
+
+## Security Model
+
+| What                    | How it's stored                                              |
+|-------------------------|--------------------------------------------------------------|
+| Master password         | Never stored — derived key held in memory for the session only |
+| Bank credentials        | AES-256-GCM encrypted in `data/credentials.enc`             |
+| Transactions / budgets  | Plaintext in `data/myfinance.db` (SQLite)                    |
+| OTP / SMS codes         | Entered in browser, never stored                             |
+| Anything in Git         | No credentials, no DB, no secrets — see `.gitignore`         |
+
+**Important:** the SQLite database (`data/myfinance.db`) contains your full transaction history in plaintext. Protect it with:
+- Full-disk encryption (BitLocker / FileVault / LUKS)
+- Encrypted backups — do not sync `data/` to an unencrypted cloud
+
+The app auto-backs up the database to `data/backups/` before each import.
+
+Cross-origin requests are blocked: only `localhost` can talk to the server, so a website you have open in another tab cannot drive the app.
+
+---
+
+## Folder Structure
+
+```
+myfinance/
+├── client/          # React frontend (Vite)
+│   └── src/
+│       └── pages/   # Dashboard, Transactions, Accounts, Budgets, …
+├── server/
+│   ├── db/          # SQLite schema, queries, categorization engine
+│   ├── routes/      # Express API routes
+│   ├── scrapers/    # Bank scraper wrapper (Puppeteer / israeli-bank-scrapers)
+│   └── crypto/      # AES-256-GCM encryption helpers
+├── tests/           # Node test files (run with `npm test`)
+├── data/            # Runtime data — git-ignored (DB, credentials, backups)
+└── logs/            # Runtime logs — git-ignored
+```
+
+---
+
+## Running Tests
+
+```bash
+cd myfinance
+npm test
+```
+
+All tests use an in-memory SQLite database — no real credentials or network needed.
+
+---
+
+## Exporting Code Without Personal Data
+
+To share or archive the code without any personal data:
 
 ```bash
 git archive --format=zip -o MyBudgetManagement-code-only.zip HEAD
 ```
 
-Do **not** zip the working directory directly — that would sweep in `data/`,
-`logs/`, `node_modules/` and `client/dist/`.
+This includes only tracked files — never `data/`, `logs/`, the database, or secrets.
 
-See `docs/DEVELOPMENT_GUIDE.md` for architecture and how to run/test locally.
+---
+
+## Disclaimer
+
+This software is provided **as-is**, without warranty of any kind. It is a personal tool, not a financial product. It is not affiliated with any bank or financial institution. Use at your own risk. Always verify important figures against your official bank statements.
+
+---
+
+## License
+
+MIT
