@@ -191,7 +191,9 @@ router.get('/overview', (req, res) => {
  *   {
  *     months: ['2026-01', ...],
  *     rows: [{ category, byMonth: { '2026-01': 1234, ... } }],   // sorted by total desc
- *     totals: { '2026-01': 1234, ... }
+ *     totals: { '2026-01': 1234, ... },   // expenses per month
+ *     income: { '2026-01': 5678, ... },   // income per month
+ *     net:    { '2026-01': 4444, ... }    // income - expenses per month
  *   }
  */
 router.get('/matrix', (req, res) => {
@@ -202,7 +204,7 @@ router.get('/matrix', (req, res) => {
 
   if (accountIds.length === 0) {
     const empty = Object.fromEntries(months.map(m => [m, 0]))
-    return res.json({ months, rows: [], totals: empty })
+    return res.json({ months, rows: [], totals: empty, income: { ...empty }, net: { ...empty } })
   }
 
   const mP = months.map(() => '?').join(',')
@@ -249,7 +251,26 @@ router.get('/matrix', (req, res) => {
     }
   }
 
-  res.json({ months, rows: rows.map(({ category, byMonth }) => ({ category, byMonth })), totals })
+  // Income per month — all positive, non-transfer, non-excluded money, matching
+  // how the Overview computes monthly income.
+  const incomeRows = db.prepare(`
+    SELECT substr(date, 1, 7) AS month,
+           SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS income
+    FROM transactions
+    WHERE substr(date, 1, 7) IN (${mP})
+      AND account_id IN (${aP})
+      AND ${NOT_EXCLUDED}
+      AND is_transfer = 0
+      ${catClause}
+    GROUP BY month
+  `).all(...months, ...accountIds, ...excludedCats)
+  const income = Object.fromEntries(months.map(m => [m, 0]))
+  for (const r of incomeRows) income[r.month] = r.income
+
+  // Net = income - expenses for each month.
+  const net = Object.fromEntries(months.map(m => [m, (income[m] || 0) - (totals[m] || 0)]))
+
+  res.json({ months, rows: rows.map(({ category, byMonth }) => ({ category, byMonth })), totals, income, net })
 })
 
 /**
