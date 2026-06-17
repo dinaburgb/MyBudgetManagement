@@ -33,8 +33,8 @@ All data stays on your machine. No cloud sync, no subscriptions, no accounts.
 | FIBI (Beinleumi)    | ✅ Working       | Deduplication by content hash                              |
 | Visa Cal            | ✅ Working       | Multi-card support                                         |
 | Mizrahi Tefahot     | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
-| Isracard            | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
-| Max                 | ⚙️ Configured   | Wired up, not yet tested end-to-end                        |
+| Isracard            | ✅ Working       | Connected and importing transactions                       |
+| Max                 | ✅ Working       | Connected and importing transactions                       |
 | OneZero             | 🚫 Blocked      | Cloudflare blocks Node's TLS fingerprint; needs workaround |
 
 Powered by [israeli-bank-scrapers](https://github.com/eshaham/israeli-bank-scrapers).
