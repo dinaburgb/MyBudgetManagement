@@ -43,10 +43,28 @@ function ChartTooltip({ active, payload, label }) {
   )
 }
 
-function PeriodPicker({ label, chips, selected, onToggle }) {
+function PeriodPicker({ label, chips, selected, onToggle, onSet }) {
+  // Distinct calendar years present among the chips (newest first), for the
+  // "whole year" quick-select buttons.
+  const years = [...new Set(chips.map(m => m.slice(0, 4)))]
+  const selectYear = y => onSet(chips.filter(m => m.startsWith(y)))
+
   return (
     <div>
-      <div className="text-sm text-gray-300 mb-2">{label}</div>
+      <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2">
+        <span className="text-sm text-gray-300">{label}</span>
+        <span className="text-gray-600">·</span>
+        <button onClick={() => onSet(chips)}
+          className="text-xs text-blue-400 hover:text-blue-300">הכל</button>
+        <button onClick={() => onSet([])}
+          className="text-xs text-gray-500 hover:text-gray-300">נקה</button>
+        {years.map(y => (
+          <button key={y} onClick={() => selectYear(y)}
+            className="text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 rounded px-1.5 py-0.5">
+            {y}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {chips.map(m => {
           const on = selected.has(m)
@@ -117,7 +135,11 @@ function MatrixTable({ matrixData, months, periodA, periodB, accounts }) {
   }
 
   if (!matrixData) return null
-  const { rows, totals } = matrixData
+  const { rows, totals, income = {}, net = {} } = matrixData
+  const sum = obj => months.reduce((s, m) => s + (obj[m] || 0), 0)
+  const totalExpenses = sum(totals)
+  const totalIncome = sum(income)
+  const totalNet = totalIncome - totalExpenses
 
   return (
     <div className="bg-gray-900 rounded-xl overflow-x-auto mb-6">
@@ -140,6 +162,9 @@ function MatrixTable({ matrixData, months, periodA, periodB, accounts }) {
                 </span>
               </th>
             ))}
+            <th className="text-center py-3 px-2 font-medium text-gray-400 whitespace-nowrap min-w-[6rem] border-r-2 border-gray-700 bg-gray-800/40">
+              ממוצע / סה"כ
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -166,11 +191,14 @@ function MatrixTable({ matrixData, months, periodA, periodB, accounts }) {
                     </td>
                   )
                 })}
+                <td className="py-2 px-2 text-center font-mono text-blue-300 border-r-2 border-gray-700 bg-gray-800/40">
+                  {ils(Object.values(row.byMonth).reduce((s, v) => s + v, 0) / months.length)}
+                </td>
               </tr>,
 
               isOpen && (
                 <tr key={`${row.category}-txn`} className="border-b border-gray-800">
-                  <td colSpan={months.length + 1} className="bg-gray-950/60 py-1">
+                  <td colSpan={months.length + 2} className="bg-gray-950/60 py-1">
                     <TxnList
                       category={row.category}
                       months={months}
@@ -184,12 +212,40 @@ function MatrixTable({ matrixData, months, periodA, periodB, accounts }) {
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-gray-700">
-            <td className="py-2.5 px-3 text-gray-300 font-bold sticky right-0 bg-gray-900">סה"כ</td>
+            <td className="py-2.5 px-3 text-gray-300 font-bold sticky right-0 bg-gray-900">סה"כ הוצאות</td>
             {months.map(m => (
-              <td key={m} className="py-2.5 px-2 text-center font-mono font-bold text-white">
+              <td key={m} className="py-2.5 px-2 text-center font-mono font-bold text-red-300">
                 {ils(totals[m] || 0)}
               </td>
             ))}
+            <td className="py-2.5 px-2 text-center font-mono font-bold text-red-300 border-r-2 border-gray-700 bg-gray-800/40">
+              {ils(totalExpenses)}
+            </td>
+          </tr>
+          <tr className="border-t border-gray-800">
+            <td className="py-2.5 px-3 text-gray-300 font-bold sticky right-0 bg-gray-900">הכנסות</td>
+            {months.map(m => (
+              <td key={m} className="py-2.5 px-2 text-center font-mono font-bold text-green-300">
+                {ils(income[m] || 0)}
+              </td>
+            ))}
+            <td className="py-2.5 px-2 text-center font-mono font-bold text-green-300 border-r-2 border-gray-700 bg-gray-800/40">
+              {ils(totalIncome)}
+            </td>
+          </tr>
+          <tr className="border-t border-gray-700">
+            <td className="py-2.5 px-3 text-white font-bold sticky right-0 bg-gray-900">נטו</td>
+            {months.map(m => {
+              const v = net[m] || 0
+              return (
+                <td key={m} className={`py-2.5 px-2 text-center font-mono font-bold ${v >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {v >= 0 ? '' : '-'}{ils(Math.abs(v))}
+                </td>
+              )
+            })}
+            <td className={`py-2.5 px-2 text-center font-mono font-bold border-r-2 border-gray-700 bg-gray-800/40 ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {totalNet >= 0 ? '' : '-'}{ils(Math.abs(totalNet))}
+            </td>
           </tr>
         </tfoot>
       </table>
@@ -280,8 +336,8 @@ export default function ComparePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <PeriodPicker label="תקופה א' (כחול)" chips={chips} selected={periodA} onToggle={toggle(setPeriodA)} />
-          <PeriodPicker label="תקופה ב' (אפור)" chips={chips} selected={periodB} onToggle={toggle(setPeriodB)} />
+          <PeriodPicker label="תקופה א' (כחול)" chips={chips} selected={periodA} onToggle={toggle(setPeriodA)} onSet={ms => setPeriodA(new Set(ms))} />
+          <PeriodPicker label="תקופה ב' (אפור)" chips={chips} selected={periodB} onToggle={toggle(setPeriodB)} onSet={ms => setPeriodB(new Set(ms))} />
         </div>
 
         {accounts.length > 0 && (
