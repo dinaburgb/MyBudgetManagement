@@ -17,7 +17,7 @@ All data stays on your machine. No cloud sync, no subscriptions, no accounts.
 - **Assets tracking** — track savings accounts, investments, real estate, and other assets alongside bank accounts
 - **Manual entry** — add transactions that don't come from a bank
 - **Transfer detection** — automatically identifies and pairs internal transfers between your accounts
-- **Month-over-month comparison** — compare spending across any two months
+- **Period comparison** — compare spending across any two custom periods (single months, several months, or whole years) with a month-by-month matrix, per-category averages, and income/expense/net totals; click any category to see the transactions behind it
 - **Encrypted credentials** — bank usernames/passwords are encrypted at rest with AES-256-GCM; the master password is never stored
 - **OTP / SMS support** — enter one-time codes directly in the browser when your bank requires 2FA
 - **Full offline** — runs as a local Node.js server; no internet required after install (except for bank scraping)
@@ -129,7 +129,28 @@ Track non-bank assets (real estate, savings plans, investments). Enter current v
 
 ### Compare
 
-Side-by-side view of spending by category for any two months.
+Compare two periods side by side. Each period (A and B) is a free selection of
+months — pick months one by one, or use the quick buttons: **All**, **Clear**,
+or a specific **year** to select all of its months at once. Quick presets
+(month-vs-previous, two-vs-two, three-vs-three) are also available.
+
+The page shows:
+
+- **Monthly matrix** (top) — categories as rows, every selected month as a
+  column. Month headers are colour-coded: blue for period A, grey for period B,
+  purple when a month belongs to both. Click any category row to expand the
+  underlying transactions inline.
+- **Summary column** (far left) — per-category **average per month** in the data
+  rows, and the **grand total** in the footer rows.
+- **Footer totals** — three rows per month: total **expenses**, total
+  **income**, and **net** (income − expenses), each also totalled in the
+  summary column.
+- **Period totals + chart** (below) — total spend for period A vs B with the
+  change and percentage, a grouped bar chart of the top categories, and a
+  per-category comparison table.
+
+Income and excluded categories (e.g. credit-card repayments, internal
+transfers) are kept out of the expense rows so the totals reflect real spending.
 
 ---
 
