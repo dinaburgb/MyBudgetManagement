@@ -27,8 +27,8 @@ Status of each bank / card integration:
 | Visa Cal          | cal        | ✅ Connected   | Connected 2026-06-12 — 87 transactions imported  |
 | Mizrahi Tefahot   | mizrahi    | ⚙️ Wired       | Configured, not yet tested with real account     |
 | OneZero           | onezero    | 🚫 CF-blocked  | SMS-link flow built, but Cloudflare blocks Node's TLS fingerprint (403/HTML) for all OneZero calls; curl from the same machine passes. Needs a curl-backed transport or CSV import. Deferred. |
-| Isracard          | isracard   | ⚙️ Wired       | Configured, not yet tested with real account     |
-| Max               | max        | ⚙️ Wired       | Configured, not yet tested with real account     |
+| Isracard          | isracard   | ✅ Connected   | Connected (user-confirmed 2026-06-17), importing  |
+| Max               | max        | ✅ Connected   | Connected (user-confirmed 2026-06-17), importing  |
 
 ## Current status
 - Phase 1 (foundation: auth, DB, accounts, transactions UI) — done
@@ -344,7 +344,7 @@ Status of each bank / card integration:
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
-- Validate the remaining wired sources (Mizrahi, OneZero, Isracard, Max) against real accounts
+- Validate the remaining wired sources (Mizrahi, OneZero) against real accounts
 - Let the user grow their own rule set from the real "אחר" transactions in Cal
 - Code-split the client bundle (recharts pushed it past 500 kB)
 - Optional: budget vs. actual on the Overview dashboard
