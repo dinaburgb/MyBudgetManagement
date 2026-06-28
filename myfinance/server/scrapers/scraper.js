@@ -28,20 +28,33 @@ const require = createRequire(import.meta.url)
 const { createScraper, CompanyTypes } = require('israeli-bank-scrapers')
 
 /**
- * Locate the Chrome binary that Puppeteer downloaded into its cache.
+ * Locate a Chrome binary to use for scraping.
  *
- * Why: Puppeteer's auto-detection sometimes fails to find Chrome — most often
- * when the Chrome .zip was only partially extracted during `npm install`
- * (antivirus locking files, an interrupted download), so `chrome.exe` is missing
- * or the bundled Puppeteer version no longer matches the downloaded Chrome. When
- * that happens the scrape dies with "Could not find Chrome". By resolving the
- * binary ourselves and passing it as `executablePath`, scraping keeps working as
- * long as a usable Chrome exists in the cache. If none is found we return null
- * and leave Puppeteer to its own auto-detection (no behaviour change).
+ * Priority order:
+ *   1. System-installed Chrome (trusted by Windows Application Control policies)
+ *   2. Puppeteer's downloaded Chrome (may be blocked by AppLocker / WDAC)
  *
- * The companion installer (installation.bat) makes sure such a Chrome exists.
+ * Returning null lets Puppeteer fall back to its own auto-detection.
  */
 function resolveChromePath() {
+  // 1. System Chrome candidates (always preferred — passes Application Control)
+  const systemCandidates = process.platform === 'win32' ? [
+    path.join('C:\\Program Files\\Google\\Chrome\\Application', 'chrome.exe'),
+    path.join('C:\\Program Files (x86)\\Google\\Chrome\\Application', 'chrome.exe'),
+    path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application', 'chrome.exe'),
+  ] : process.platform === 'darwin' ? [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  ] : [
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+  ]
+
+  for (const p of systemCandidates) {
+    if (fs.existsSync(p)) return p
+  }
+
+  // 2. Puppeteer cache (fallback — may be blocked on managed Windows machines)
   const cacheDir = process.env.PUPPETEER_CACHE_DIR || path.join(os.homedir(), '.cache', 'puppeteer')
   const chromeRoot = path.join(cacheDir, 'chrome')
   if (!fs.existsSync(chromeRoot)) return null
@@ -50,8 +63,6 @@ function resolveChromePath() {
     : process.platform === 'darwin' ? 'Google Chrome for Testing'
     : 'chrome'
 
-  // Walk the (shallow) cache tree looking for the platform's Chrome binary,
-  // preferring the highest version folder so we use the newest install.
   const findBinary = (dir, depth = 0) => {
     if (depth > 4) return null
     let entries
@@ -73,7 +84,7 @@ function resolveChromePath() {
       .filter(e => e.isDirectory())
       .map(e => e.name)
       .sort()
-      .reverse()   // highest version first
+      .reverse()
   } catch { return null }
 
   for (const ver of versionDirs) {
