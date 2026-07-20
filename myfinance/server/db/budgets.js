@@ -347,7 +347,7 @@ export function budgetSummaryForMonths(db, months) {
  */
 export function budgetCategoryTransactions(db, category, month) {
   return db.prepare(`
-    SELECT t.id, t.date, t.description, t.amount, t.account_name, t.source,
+    SELECT t.id, t.date, t.description, t.amount, t.category, t.account_name, t.source,
            t.type, t.installment_number, t.installment_total, t.note
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id

@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions } from '../server/db/save-transactions.js'
-import { computeBudgetOverview, computeIncomeOverview, monthlyBudgetSummary, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions, budgetEnvelope } from '../server/db/budgets.js'
+import { computeBudgetOverview, computeIncomeOverview, monthlyBudgetSummary, setBudget, deleteBudget, isValidMonth, budgetSummaryForMonths, budgetSuggestions, budgetEnvelope, budgetCategoryTransactions } from '../server/db/budgets.js'
 import { seedCategories } from '../server/db/categories.js'
 
 let passed = 0, failed = 0
@@ -236,6 +236,16 @@ test('monthlyBudgetSummary rolls up planned vs actual income/expense per data mo
   assert.strictEqual(may.actualBalance, 16200)   // 17000 - 800
   assert.strictEqual(may.plannedBalance, 17000)  // 18000 - 1000
   assert.strictEqual(months[1].actualBalance, 16800)  // 18000 - 1200
+})
+
+test('budgetCategoryTransactions returns the category field (drill-down dropdown bug)', () => {
+  const db = freshDb()
+  saveAccountTransactions(account, { accountNumber: '1', txns: [
+    txn({ category: 'מסעדות', chargedAmount: -59, date: '2026-07-16T00:00:00.000Z', description: 'פלאפל זוהר בע"מ' }),
+  ] }, db)
+  const rows = budgetCategoryTransactions(db, 'מסעדות', '2026-07')
+  assert.strictEqual(rows.length, 1)
+  assert.strictEqual(rows[0].category, 'מסעדות')  // was missing from the SELECT → UI showed 'אחר'
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)
