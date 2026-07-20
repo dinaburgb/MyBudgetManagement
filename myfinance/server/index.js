@@ -14,7 +14,7 @@ import { createServer } from 'node:http'
 import { WebSocketServer } from 'ws'
 import cors from 'cors'
 import fs from 'node:fs'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -182,6 +182,7 @@ app.post('/api/app/shutdown', (req, res) => {
   console.log('Shutdown requested — closing cleanly...')
   // Let the response flush, then tear everything down.
   setTimeout(() => {
+    try { closeScraperBrowsers() } catch { /* ignore */ }
     try { wss.close() } catch { /* ignore */ }
     try { closeDatabase() } catch { /* ignore */ }
     server.close(() => process.exit(0))
@@ -189,6 +190,29 @@ app.post('/api/app/shutdown', (req, res) => {
     setTimeout(() => process.exit(0), 1500).unref?.()
   }, 150)
 })
+
+/**
+ * Close any scraper browser windows (the Puppeteer-launched Chrome where the
+ * user types bank passwords/OTP) that are still open — e.g. after a failed or
+ * abandoned scrape. Puppeteer's Chrome is a direct child of this process and
+ * its command line always carries --remote-debugging; the dedicated app window
+ * and the user's own browser don't match that, so they're left alone (the app
+ * window closes itself via window.close() in the client).
+ * Windows-only best effort — on other platforms Puppeteer's own exit handlers
+ * are reliable.
+ */
+function closeScraperBrowsers() {
+  if (process.platform !== 'win32') return
+  try {
+    const out = execSync(
+      `powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter 'ParentProcessId=${process.pid}' | Where-Object { $_.CommandLine -match 'remote-debugging' } | Select-Object -ExpandProperty ProcessId"`,
+      { encoding: 'utf8', timeout: 8000 }
+    )
+    for (const pid of out.split(/\s+/).filter(s => /^\d+$/.test(s))) {
+      try { execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore', timeout: 5000 }) } catch { /* already gone */ }
+    }
+  } catch { /* best effort */ }
+}
 
 // --- API routes ---
 app.use('/api/accounts',     accountsRouter)
