@@ -311,7 +311,7 @@ export function applyRuleToUncategorized(db, keyword, category) {
   const safe = String(keyword).replace(/[\\%_]/g, ch => '\\' + ch)
   return db.prepare(
     `UPDATE transactions SET category = ?, updated_at = datetime('now')
-     WHERE category = ? AND description LIKE ? ESCAPE '\\'`
+     WHERE category = ? AND category_manual = 0 AND description LIKE ? ESCAPE '\\'`
   ).run(category, OTHER_CATEGORY, `%${safe}%`).changes
 }
 
@@ -326,8 +326,25 @@ export function applyKeywordToAll(db, keyword, category) {
   const safe = String(keyword).replace(/[\\%_]/g, ch => '\\' + ch)
   return db.prepare(
     `UPDATE transactions SET category = ?, updated_at = datetime('now')
-     WHERE category != ? AND description LIKE ? ESCAPE '\\'`
+     WHERE category != ? AND category_manual = 0 AND description LIKE ? ESCAPE '\\'`
   ).run(category, category, `%${safe}%`).changes
+}
+
+/**
+ * Manually assign a category to a set of transaction ids (bulk edit from the UI).
+ * Marks each row category_manual = 1 so no rule, re-categorization pass, or future
+ * scrape logic will ever overwrite the user's explicit choice. The original
+ * scraper data stays intact in raw_payload_json. Returns rows updated.
+ */
+export function bulkSetCategory(db, ids, category) {
+  const clean = [...new Set((ids || []).map(Number).filter(n => Number.isInteger(n) && n > 0))]
+  if (clean.length === 0 || !category) return 0
+  const placeholders = clean.map(() => '?').join(',')
+  return db.prepare(
+    `UPDATE transactions
+     SET category = ?, category_manual = 1, updated_at = datetime('now')
+     WHERE id IN (${placeholders})`
+  ).run(category, ...clean).changes
 }
 
 /**
@@ -342,8 +359,9 @@ export function applyKeywordToAll(db, keyword, category) {
  */
 export function recategorizeAll(db = getDb(), { onlyOther = true } = {}) {
   const rules = loadRules(db)
+  // category_manual = 1 rows are the user's explicit choices — never touch them.
   const rows = db.prepare(
-    `SELECT id, description, category FROM transactions`
+    `SELECT id, description, category FROM transactions WHERE category_manual = 0`
   ).all()
 
   const update = db.prepare(

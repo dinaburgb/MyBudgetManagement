@@ -342,6 +342,24 @@ Status of each bank / card integration:
   - `PeriodPicker` quick-select: "all" (הכל), "clear" (נקה) and per-year buttons,
     on top of the existing month chips and presets.
 
+- **Bulk category edit + manual-category protection (2026-07-20):**
+  - Transactions page: checkbox column with per-page "select all", a bulk action
+    bar (move N selected transactions to a chosen category), and a
+    "select all X filtered results" escalation that applies server-side to
+    everything matching the current filters. New filter: "רק מטבע חוץ"
+    (foreign-currency only — the strongest signal for spending abroad).
+  - API: `PUT /api/transactions/bulk/category` accepts `{ ids, category }` or
+    `{ filters, category }` (same filter keys as the list endpoint; refuses a
+    filterless bulk update). Filter building refactored into `buildTxnFilters`
+    shared by both endpoints.
+  - New `transactions.category_manual` flag (schema + idempotent migration):
+    set to 1 on every manual category change (single or bulk). Rules,
+    `recategorizeAll` (both modes), `applyKeywordToAll` and
+    `applyRuleToUncategorized` now skip manual rows — a user's explicit choice
+    is never overwritten by rules or future scrapes. Original scraper data
+    remains intact in `raw_payload_json`.
+  - Tests: `tests/test_bulk_category.js` (8). Full suite passing (78 total).
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero) against real accounts

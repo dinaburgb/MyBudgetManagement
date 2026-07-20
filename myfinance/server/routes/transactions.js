@@ -7,6 +7,7 @@ import { getDb } from '../db/database.js'
 import { isUnlocked } from '../crypto/encryption.js'
 import { notExcludedSql } from '../db/subaccounts.js'
 import { insertManualTransaction } from '../db/save-transactions.js'
+import { bulkSetCategory } from '../db/categorize.js'
 import { csvSafeText } from '../util/csv.js'
 
 const router = Router()
@@ -16,17 +17,21 @@ router.use((req, res, next) => {
   next()
 })
 
-/** GET /api/transactions — list transactions with optional filters */
-router.get('/', (req, res) => {
+/**
+ * Build the WHERE clause + params from a filter object (the same keys the GET
+ * endpoint accepts as query params). Shared by the list endpoint and the bulk
+ * category update, so "apply to all filtered transactions" matches exactly what
+ * the user sees on screen.
+ */
+function buildTxnFilters(query) {
   const {
     owner, source, category, status,
     account_id, exclude_account_id,
-    only_in_totals,
+    only_in_totals, foreign_currency,
     date_from, date_to,
     amount_min, amount_max,
     search,
-    page = 1, limit = 50
-  } = req.query
+  } = query
 
   const where  = []
   const params = []
@@ -49,9 +54,9 @@ router.get('/', (req, res) => {
   // Sub-account filter: comma-separated "accountId:accountNumber" pairs. Matched
   // as (account_id = ? AND account_number = ?) so a number can't collide across
   // two different logins that happen to share it.
-  if (req.query.subaccount) {
+  if (query.subaccount) {
     const ors = []
-    for (const pair of String(req.query.subaccount).split(',').map(s => s.trim()).filter(Boolean)) {
+    for (const pair of String(query.subaccount).split(',').map(s => s.trim()).filter(Boolean)) {
       const sep = pair.indexOf(':')
       if (sep === -1) continue
       const accId = Number(pair.slice(0, sep))
@@ -67,6 +72,11 @@ router.get('/', (req, res) => {
     where.push('account_id IN (SELECT id FROM accounts WHERE include_in_totals = 1)')
     where.push(notExcludedSql('transactions.account_id', 'transactions.account_number'))
   }
+  // Foreign-currency transactions only — the strongest signal for charges made
+  // abroad (e.g. when reviewing a trip's expenses).
+  if (foreign_currency === '1') {
+    where.push("(COALESCE(original_currency, 'ILS') != 'ILS' OR COALESCE(charged_currency, 'ILS') != 'ILS')")
+  }
   if (date_from)  { where.push('date >= ?');      params.push(date_from) }
   if (date_to)    { where.push('date <= ?');      params.push(date_to) }
   if (amount_min) { where.push('amount >= ?');    params.push(Number(amount_min)) }
@@ -79,7 +89,17 @@ router.get('/', (req, res) => {
     params.push(`${safe}%`)
   }
 
-  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  return {
+    whereClause: where.length ? `WHERE ${where.join(' AND ')}` : '',
+    params,
+  }
+}
+
+/** GET /api/transactions — list transactions with optional filters */
+router.get('/', (req, res) => {
+  const { page = 1, limit = 50 } = req.query
+  const { whereClause, params } = buildTxnFilters(req.query)
+
   // Validate pagination: page >= 1, limit 1..500 (cap protects memory/perf).
   const limitN = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500)
   const pageN  = Math.max(parseInt(page, 10) || 1, 1)
@@ -94,6 +114,7 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT id, external_id, date, processed_date, amount, original_currency,
            charged_amount, charged_currency, description, memo, note, category,
+           category_manual,
            owner, account_id, account_number, account_name, source, card_last4, type,
            installment_number, installment_total, status, is_transfer,
            (SELECT label FROM subaccount_labels sl
@@ -139,13 +160,56 @@ router.post('/', (req, res) => {
   res.json({ id, message: 'Transaction added' })
 })
 
+/**
+ * PUT /api/transactions/bulk/category — set a category for many transactions at
+ * once (the checkbox multi-select in the UI). Two modes:
+ *   { ids: [1,2,3], category }            — update these exact rows
+ *   { filters: {...}, category }          — update ALL rows matching the given
+ *     filters (same keys as the GET query params), for "select all filtered".
+ * Every updated row is marked category_manual = 1 (protected from rules/scrapes).
+ * Returns { updated }.
+ * NOTE: must be registered BEFORE /:id/category, or Express would match this
+ * path with id = 'bulk'.
+ */
+router.put('/bulk/category', (req, res) => {
+  const { ids, filters, category } = req.body || {}
+  if (!category || !String(category).trim()) {
+    return res.status(400).json({ error: 'category is required' })
+  }
+  const cat = String(category).trim()
+  const db = getDb()
+
+  if (Array.isArray(ids) && ids.length > 0) {
+    const updated = bulkSetCategory(db, ids, cat)
+    return res.json({ message: 'Categories updated', updated })
+  }
+
+  if (filters && typeof filters === 'object') {
+    const { whereClause, params } = buildTxnFilters(filters)
+    if (!whereClause) {
+      // Refuse a filterless bulk update — it would rewrite the entire table.
+      return res.status(400).json({ error: 'filters must not be empty' })
+    }
+    const updated = db.prepare(
+      `UPDATE transactions
+       SET category = ?, category_manual = 1, updated_at = datetime('now')
+       ${whereClause}`
+    ).run(cat, ...params).changes
+    return res.json({ message: 'Categories updated', updated })
+  }
+
+  res.status(400).json({ error: 'ids or filters are required' })
+})
+
 /** PUT /api/transactions/:id/category — manually set a category */
 router.put('/:id/category', (req, res) => {
   const { category } = req.body
   if (!category) return res.status(400).json({ error: 'category is required' })
   const db = getDb()
+  // category_manual = 1: the user chose this by hand — rules and future
+  // re-categorization passes must never overwrite it.
   db.prepare(
-    `UPDATE transactions SET category = ?, updated_at = datetime('now') WHERE id = ?`
+    `UPDATE transactions SET category = ?, category_manual = 1, updated_at = datetime('now') WHERE id = ?`
   ).run(category, req.params.id)
   res.json({ message: 'Category updated' })
 })

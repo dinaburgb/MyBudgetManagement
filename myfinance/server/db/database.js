@@ -89,6 +89,11 @@ function runSchemaMigrations(db) {
     console.log('Migration: added financial_assets.category')
   }
 
+  if (!hasColumn('transactions', 'category_manual')) {
+    db.exec(`ALTER TABLE transactions ADD COLUMN category_manual INTEGER NOT NULL DEFAULT 0`)
+    console.log('Migration: added transactions.category_manual')
+  }
+
   if (!hasColumn('financial_assets', 'sort_order')) {
     db.exec(`ALTER TABLE financial_assets ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
     // Give existing assets a stable initial order (by id) so the up/down controls

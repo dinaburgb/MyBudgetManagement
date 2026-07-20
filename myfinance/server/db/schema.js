@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   memo                TEXT DEFAULT '',          -- raw memo from the scraper (do not overwrite)
   note                TEXT DEFAULT '',          -- user's own free-text note on the transaction
   category            TEXT DEFAULT 'Other',
+  category_manual     INTEGER NOT NULL DEFAULT 0,  -- 1 = category set by the user; rules/scrapes must not overwrite
   owner               TEXT DEFAULT 'Me',  -- Me / Partner / Joint
   account_id          INTEGER REFERENCES accounts(id),
   account_number      TEXT,
