@@ -360,6 +360,31 @@ Status of each bank / card integration:
     remains intact in `raw_payload_json`.
   - Tests: `tests/test_bulk_category.js` (8). Full suite passing (78 total).
 
+- **Transactions: totals for the selected rows (2026-07-31):**
+  - Ticking one or more rows on the Transactions page now shows a summary strip
+    above the bulk action bar: net total (green/red by sign), income (+),
+    expenses (−, shown as a positive magnitude) and the transaction count.
+    Sign convention follows `amount` — expense < 0, income > 0 — the same field
+    every dashboard chart already sums, so the numbers stay consistent.
+    Internal transfers are included as-is (deliberate choice, not an oversight).
+  - Three ways to select: per-row checkbox, the header checkbox (everything on
+    screen), and the existing "select all X filtered results" escalation — the
+    last one totals server-side across all pages, not just the visible one.
+  - Client selection state moved from a `Set` of ids to a `Map` of id → signed
+    amount (`TransactionsPage.jsx`), so a selection spanning several pages still
+    totals correctly without a round-trip. `applyBulkCategory` now sends
+    `[...selected.keys()]`.
+  - API: `GET /api/transactions/summary` returns `{ count, income, expense, net }`.
+    Accepts either `?ids=1,2,3` (chunked to stay under SQLite's bound-variable
+    limit) or the same filter keys as the list endpoint, via the shared
+    `buildTxnFilters`. Logic extracted into the exported `summarizeTransactions`
+    so it is testable without booting Express.
+  - Tests: `tests/test_txn_summary.js` (11). Full suite passing (135 total).
+  - NOTE: `amount` holds `chargedAmount`. For an account held in foreign currency
+    (e.g. OneZero) `charged_currency` may not be ILS, so the total would mix
+    currencies. Pre-existing behaviour across the whole dashboard; a per-currency
+    split is a possible follow-up.
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero) against real accounts
