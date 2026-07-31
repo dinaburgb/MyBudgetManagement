@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, useMemo, Fragment } from 'react'
 import { Download, Plus } from 'lucide-react'
 import axios from 'axios'
 import { useCategories } from '../CategoriesContext.jsx'
@@ -25,9 +25,13 @@ export default function TransactionsPage() {
   const EMPTY_FILTERS = { search: '', owners: [], categories: [], account_ids: [], subaccounts: [], only_in_totals: '', foreign_currency: '', date_from: '', date_to: '' }
   const [filters, setFilters] = useState(EMPTY_FILTERS)
 
-  // Bulk selection: ids the user ticked, or "all filtered" mode (beyond this page)
-  const [selected, setSelected] = useState(new Set())
+  // Bulk selection: a Map of id -> signed amount, so the selected total can be
+  // summed on the client even for rows the user ticked on an earlier page.
+  // `allFiltered` = "every row matching the filter", including rows never loaded.
+  const [selected, setSelected] = useState(new Map())
   const [allFiltered, setAllFiltered] = useState(false)
+  // Server-side totals for the allFiltered mode (rows we don't have locally).
+  const [filteredTotals, setFilteredTotals] = useState(null)
   const [bulkCat, setBulkCat] = useState('')
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkDone, setBulkDone] = useState(null)   // success message after apply
@@ -78,16 +82,25 @@ export default function TransactionsPage() {
   useEffect(() => { load() }, [page])
 
   function clearSelection() {
-    setSelected(new Set())
+    setSelected(new Map())
     setAllFiltered(false)
+    setFilteredTotals(null)
     setBulkDone(null)
   }
 
   function toggleRow(id) {
-    setAllFiltered(false)
+    // Leaving "all filtered" mode: fall back to just this page's rows, minus the
+    // one being unticked, so the count and the total stay truthful.
+    if (allFiltered) {
+      setAllFiltered(false)
+      setFilteredTotals(null)
+      setSelected(new Map(rows.filter(r => r.id !== id).map(r => [r.id, r.amount])))
+      return
+    }
     setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
+      const next = new Map(prev)
+      if (next.has(id)) next.delete(id)
+      else next.set(id, rows.find(r => r.id === id)?.amount ?? 0)
       return next
     })
   }
@@ -95,11 +108,13 @@ export default function TransactionsPage() {
   // Header checkbox: select/deselect every row on the current page.
   const pageAllSelected = rows.length > 0 && rows.every(r => selected.has(r.id))
   function togglePage() {
+    const wasAllFiltered = allFiltered
     setAllFiltered(false)
+    setFilteredTotals(null)
     setSelected(prev => {
-      const next = new Set(prev)
-      if (pageAllSelected) rows.forEach(r => next.delete(r.id))
-      else rows.forEach(r => next.add(r.id))
+      const next = new Map(prev)
+      if (pageAllSelected || wasAllFiltered) rows.forEach(r => next.delete(r.id))
+      else rows.forEach(r => next.set(r.id, r.amount))
       return next
     })
   }
@@ -107,16 +122,44 @@ export default function TransactionsPage() {
   const hasActiveFilters = Object.keys(filterParams()).length > 0
   const selectedCount = allFiltered ? total : selected.size
 
+  // Totals for the ticked rows. Amounts are signed (expense < 0, income > 0),
+  // so `net` is their plain sum; `expense` is kept as a positive magnitude.
+  const selectedTotals = useMemo(() => {
+    let income = 0, expense = 0
+    for (const amt of selected.values()) {
+      const n = Number(amt) || 0
+      if (n > 0) income += n
+      else expense += -n
+    }
+    return { count: selected.size, income, expense, net: income - expense }
+  }, [selected])
+
+  // In "all filtered" mode the rows aren't all loaded, so ask the server.
+  useEffect(() => {
+    if (!allFiltered) return
+    let cancelled = false
+    setFilteredTotals(null)
+    axios.get('/api/transactions/summary', { params: filterParams() })
+      .then(res => { if (!cancelled) setFilteredTotals(res.data) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [allFiltered])
+
+  const totals = allFiltered ? filteredTotals : selectedTotals
+
+  const fmt = n => `₪${Math.abs(n).toLocaleString('he-IL', { maximumFractionDigits: 2 })}`
+
   async function applyBulkCategory() {
     if (!bulkCat || selectedCount === 0) return
     setBulkBusy(true)
     try {
       const body = allFiltered
         ? { filters: filterParams(), category: bulkCat }
-        : { ids: [...selected], category: bulkCat }
+        : { ids: [...selected.keys()], category: bulkCat }
       const res = await axios.put('/api/transactions/bulk/category', body)
-      setSelected(new Set())
+      setSelected(new Map())
       setAllFiltered(false)
+      setFilteredTotals(null)
       setBulkDone(`${res.data.updated} תנועות הועברו לקטגוריה "${bulkCat}"`)
       await load()
     } finally {
@@ -268,9 +311,42 @@ export default function TransactionsPage() {
 
       {/* Bulk action bar — appears when at least one row is ticked */}
       {(selectedCount > 0 || bulkDone) && (
-        <div className="flex flex-wrap items-center gap-3 mb-4 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
+        <div className="mb-4 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
           {selectedCount > 0 ? (
             <>
+            {/* Totals for the selection: net, plus the income/expense split */}
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-3 mb-3 border-b border-gray-700">
+              <div>
+                <div className="text-xs text-gray-400">סך הכל (נטו)</div>
+                {totals ? (
+                  <div className={`text-lg font-mono font-semibold ${
+                    totals.net < 0 ? 'text-red-400' : 'text-green-400'
+                  }`}>
+                    {totals.net < 0 ? '-' : '+'}{fmt(totals.net)}
+                  </div>
+                ) : (
+                  <div className="text-lg font-mono text-gray-500">מחשב…</div>
+                )}
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">הכנסות</div>
+                <div className="text-sm font-mono text-green-400">
+                  {totals ? `+${fmt(totals.income)}` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">הוצאות</div>
+                <div className="text-sm font-mono text-red-400">
+                  {totals ? `-${fmt(totals.expense)}` : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-400">תנועות</div>
+                <div className="text-sm font-mono text-gray-300">{selectedCount}</div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-white font-medium">
                 נבחרו {selectedCount} תנועות{allFiltered ? ' (כל התוצאות המסוננות)' : ''}
               </span>
@@ -304,12 +380,13 @@ export default function TransactionsPage() {
               >
                 נקה בחירה
               </button>
+            </div>
             </>
           ) : (
-            <>
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm text-emerald-400">{bulkDone}</span>
               <button onClick={() => setBulkDone(null)} className="text-gray-400 hover:text-white text-sm">סגור</button>
-            </>
+            </div>
           )}
         </div>
       )}

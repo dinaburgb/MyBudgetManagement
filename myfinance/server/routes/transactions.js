@@ -130,6 +130,52 @@ router.get('/', (req, res) => {
 })
 
 /**
+ * GET /api/transactions/summary — totals for the current filter, or for an
+ * explicit list of ids (?ids=1,2,3). Amounts are signed: expenses are negative,
+ * income positive, so `net` is simply their sum.
+ * Returns { count, income, expense, net } where `expense` is a positive
+ * magnitude (the display flips the sign), and `net = income - expense`.
+ * NOTE: must be registered BEFORE any /:id route.
+ */
+const SUMMARY_SELECT = `
+  SELECT COUNT(*) AS count,
+         COALESCE(SUM(CASE WHEN amount > 0 THEN  amount ELSE 0 END), 0) AS income,
+         COALESCE(SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END), 0) AS expense
+  FROM transactions
+`
+
+/**
+ * Totals for a set of transactions. `query.ids` (comma-separated) wins over the
+ * filter keys; without it, the same filters as the list endpoint apply.
+ * Exported for tests.
+ */
+export function summarizeTransactions(db, query = {}) {
+  if (query.ids != null) {
+    const ids = String(query.ids)
+      .split(',').map(s => parseInt(s.trim(), 10))
+      .filter(Number.isInteger)
+    let count = 0, income = 0, expense = 0
+    // Chunked to stay well under SQLite's bound-variable limit.
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      const r = db.prepare(
+        `${SUMMARY_SELECT} WHERE id IN (${chunk.map(() => '?').join(',')})`
+      ).get(...chunk)
+      count += r.count; income += r.income; expense += r.expense
+    }
+    return { count, income, expense, net: income - expense }
+  }
+
+  const { whereClause, params } = buildTxnFilters(query)
+  const r = db.prepare(`${SUMMARY_SELECT} ${whereClause}`).get(...params)
+  return { count: r.count, income: r.income, expense: r.expense, net: r.income - r.expense }
+}
+
+router.get('/summary', (req, res) => {
+  res.json(summarizeTransactions(getDb(), req.query))
+})
+
+/**
  * POST /api/transactions — add a transaction by hand (e.g. a cash payment).
  * Body: { date 'YYYY-MM-DD', description, amount (signed: -expense/+income),
  *         category?, owner?, account_id? }.
