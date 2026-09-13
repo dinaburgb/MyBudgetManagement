@@ -389,10 +389,17 @@ Status of each bank / card integration:
   - New tab between השוואה and חשבונות: seven monthly-level readings that explain
     the family's financial mechanism instead of listing numbers (chosen from a
     GPT brainstorm of 12; see the tab's own notes for the rules):
-    1. **החודש המייצג** — median income/expenses/net (a single unusual month
-       doesn't move it), annualised gap, p25–p75 range, volatility level
-       (stable/moderate/volatile) and pattern (one-off outlier vs "a different
-       surprise every month").
+    1. **החודש המייצג** — typical income per payer + median expenses (a single
+       unusual month doesn't move it), annualised gap, p25–p75 range, volatility
+       level (stable/moderate/volatile) and pattern (one-off outlier vs "a
+       different surprise every month"). Income is NOT the raw monthly median:
+       `incomeComposition` clusters payers (bank-transfer memos → shared ≥3-word
+       prefix), then a 'regular' payer (N−1…N+1 payments of a stable amount)
+       contributes its median payment once a month — so a salary landing on the
+       31st one month and the 1st the next (0/2-salary months) doesn't distort
+       it; 'irregular' payers contribute total÷N; a 'one-off' (single payment in
+       ≥4 months) is excluded and listed for review (often an own-account
+       transfer filed as income). The card shows the composition table.
     2. **מבני או התנהגותי** — fixed obligations (auto-detected recurring
        merchants + installment charges) vs variable spending vs income; verdict
        balanced / structural (fixed ≥60% of income or leave nothing) /
@@ -406,7 +413,8 @@ Status of each bank / card integration:
        suggest median), loose (median <70%, rarely over → suggest p75),
        realistic; planningGap = Σ(median − limit) over wishful ones.
     5. **האם יש שיפור** — recent half of the window vs the earlier half:
-       expenses, income, net, budget breaches/month, share left in 'אחר'
+       expenses, income (one-off income excluded, so a transfer can't pose as
+       improvement), net, budget breaches/month, share left in 'אחר'
        (bookkeeping accuracy), biggest movers up/down; verdict
        improving/worsening/flat (±3% of income on net or ±5% expenses).
     6. **הוצאות תקופתיות** — merchants seen in ≤2 months with a big charge
@@ -421,6 +429,16 @@ Status of each bank / card integration:
   - A "בארבע שורות" summary on top (normal month / what creates the gap / what
     changed / what to check). Window selector: 3 / 6 / 12 / all COMPLETE months —
     the current month is never included.
+  - Every card ends with a "שימו לב" block: 1–4 plain-language points derived
+    from the numbers (what it means + what to do), e.g. fixed-share benchmarks
+    (<40% comfortable, 40–60% tight, >60% structural), what a new/pricier
+    subscription costs per year, "many small" vs "few large" tactics, wishful
+    budgets ("two real options"), seasonality caveats, the set-aside mechanism,
+    installment share thresholds (<5% / 5–10% / >10% of income).
+  - Verified against the real DB: month-by-month income and expenses are
+    identical to the Budgets page monthly summary (diff 0). The raw monthly
+    median income WAS inflated there by salary timing (7 salaries in 4 of 6
+    months) and one-off credits — hence the per-payer typical income.
   - Conventions match the Budgets monthly summary: included accounts minus
     excluded sub-accounts, no transfers, no excluded categories, expenses =
     negatives in non-income categories, income = positives in income categories,
@@ -433,7 +451,7 @@ Status of each bank / card integration:
   - Code: `server/db/insights.js` (pure functions, ~25ms on the real DB),
     `server/routes/insights.js` (`GET /api/insights?months=6|all`),
     `client/src/pages/InsightsPage.jsx`; `effectiveLimitsByMonth` exported from
-    `db/budgets.js`. Tests: `tests/test_insights.js` (25). Full suite: 161 passing.
+    `db/budgets.js`. Tests: `tests/test_insights.js` (28). Full suite: 164 passing.
   - Balance history (prerequisite for a future cash-flow / net-worth timeline —
     GPT's #9): new `account_balance_history` table (one row per account number
     per day, written by `upsertBalance` on every sync; cards skipped),

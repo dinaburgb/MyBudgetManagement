@@ -21,6 +21,12 @@ const monthName  = key => HE_LONG[+key.split('-')[1] - 1]
 const pct = (x, digits = 0) => x == null ? '—' : `${(x * 100).toFixed(digits)}%`
 const signed = n => (n >= 0 ? '+' : '−') + ils(Math.abs(n))
 const n1 = n => (Math.round(n * 10) / 10).toLocaleString('he-IL')
+// Calendar months (names) that a window shorter than a year does not cover.
+const missingMonths = months => {
+  if (!months || months.length === 0 || months.length >= 12) return []
+  const covered = new Set(months.map(m => +m.split('-')[1]))
+  return HE_LONG.filter((_, i) => !covered.has(i + 1))
+}
 
 // ---------------------------------------------------------------------------
 // Small building blocks
@@ -93,6 +99,20 @@ function Empty({ children }) {
   return <div className="text-sm text-gray-500 bg-gray-800/40 rounded-lg px-3 py-3">{children}</div>
 }
 
+/** "שימו לב" — plain-language points worth the family's attention, with what to do. */
+function Attention({ items }) {
+  const list = (items || []).filter(Boolean)
+  if (!list.length) return null
+  return (
+    <div className="mt-4 border-r-2 border-amber-400/60 bg-amber-500/5 rounded-lg px-4 py-3">
+      <div className="text-amber-300 text-xs font-semibold mb-1.5">שימו לב</div>
+      <ul className="space-y-1.5">
+        {list.map((t, i) => <li key={i} className="text-sm text-gray-200 leading-relaxed flex gap-2"><span className="text-amber-400/70 shrink-0">•</span><span>{t}</span></li>)}
+      </ul>
+    </div>
+  )
+}
+
 function ChartTip({ active, payload, label, fmt = ils }) {
   if (!active || !payload?.length) return null
   return (
@@ -124,28 +144,40 @@ function RepresentativeCard({ r, window }) {
       <Empty>צריך לפחות 3 חודשים שלמים. יש כרגע {r.monthsCount}.</Empty>
     </Card>
   )
-  const med = r.median, deficit = med.net < 0
+  const deficit = r.net < 0
   const v = r.volatility
   const volLabel = { stable: 'יציב', moderate: 'תנודתיות בינונית', volatile: 'תנודתי' }[v.level]
   const volTone  = { stable: 'green', moderate: 'amber', volatile: 'red' }[v.level]
   const headline = deficit
-    ? `בחודש רגיל המשפחה מוציאה ${ils(-med.net)} יותר מהכנסתה — בקצב שנתי הפער גדל בכ־${ils(-r.annualizedNet)}.`
-    : `בחודש רגיל נשארים ${ils(med.net)} — בקצב שנתי כ־${ils(r.annualizedNet)}.`
+    ? `בחודש רגיל המשפחה מוציאה ${ils(-r.net)} יותר מהכנסתה — בקצב שנתי הפער גדל בכ־${ils(-r.annualizedNet)}.`
+    : `בחודש רגיל נשארים ${ils(r.net)} — בקצב שנתי כ־${ils(r.annualizedNet)}.`
   const patternText = v.pattern === 'stable' ? 'אין חודשים חריגים — ההוצאות דומות מחודש לחודש.'
     : v.pattern === 'one-off'
       ? `חודש חריג ${v.outliers.length === 1 ? 'אחד' : ''}: ${v.outliers.map(o => `${monthName(o.month)} (${o.deviationPct > 0 ? '+' : '−'}${pct(Math.abs(o.deviationPct))})`).join(', ')}. השאר דומים — לכן החציון הוא המספר האמין.`
       : `${v.outliers.length} מתוך ${r.monthsCount} חודשים רחוקים מהחציון ביותר מ־20% — "בכל חודש הפתעה אחרת". כשזה קורה, ההפתעות הן לא באמת בלת"מים: כדאי סעיף חודשי קבוע להוצאות לא שוטפות (ראה #6).`
 
   const chart = r.months.map(t => ({ label: monthShort(t.month), net: Math.round(t.net), income: Math.round(t.income), expenses: Math.round(t.expenses) }))
+  const KIND = { regular: ['חודשי קבוע', 'green'], irregular: ['לא סדיר', 'blue'], 'one-off': ['חד־פעמי', 'amber'] }
+  const oneOff = r.oneOffIncome
+  const bigOneOff = oneOff.items.filter(i => i.share >= 0.03)
+
+  const attention = [
+    deficit
+      ? `הפער החודשי (${ils(-r.net)}) הוא הסכום שצריך לסגור כדי לעצור את הגידול במינוס — או בהכנסה, או בהוצאות, או בשילוב. בשנה זה ${ils(-r.annualizedNet)}; זה המספר שכדאי להחזיק בראש, לא החודש הבודד.`
+      : `בחודש רגיל נשארים ${ils(r.net)}. אם הסכום הזה לא מופיע בפועל כחיסכון (יתרה שגדלה, הפקדה קבועה) — הכסף "זולג": להוצאות שלא נרשמות כאן, להעברות, או לחודשים החריגים. שווה לבדוק לאן.`,
+    r.incomeJitter && `משכורת שנכנסת פעם בסוף החודש ופעם בתחילת החודש הבא יוצרת בגרף חודשים עם 0 או 2 משכורות. זו לא תנודה אמיתית בהכנסה — לכן ההכנסה הטיפוסית מחושבת לפי תשלום אחד לחודש לכל מקור קבוע, ולא לפי החודש שבו הוא נחת (החציון הגולמי של החודשים היה ${ils(r.median.income)}).`,
+    bigOneOff.length > 0 && `${ils(oneOff.total)} מההכנסות בתקופה הם תשלומים חד־פעמיים (${bigOneOff.map(i => i.description).join(', ')}) — הם לא חלק מהחודש הטיפוסי. אם זו העברה מחשבון שלכם ולא הכנסה, עדיף לסמן אותה כהעברה פנימית בעמוד התנועות (או להוציא מקטגוריית ההכנסות), אחרת היא מנפחת את ההכנסות בעמודים האחרים.`,
+    v.level === 'volatile' && `ההוצאות משתנות חזק מחודש לחודש (${pct(v.cv)} סטייה). במצב כזה תקציב חודשי אחיד לא יחזיק — עדיף להפריד "שוטף" מ"לא שוטף" ולתקצב אותם בנפרד (כרטיס #6).`,
+  ]
 
   return (
     <Card n={1} title="החודש המייצג — הפער האמיתי" verdict={deficit ? 'פער חודשי' : 'עודף חודשי'} tone={deficit ? 'red' : 'green'} headline={headline}
-      note={`חציון = הערך האמצעי בין ${r.monthsCount} החודשים, כך שחודש חריג אחד לא מזיז אותו (הממוצע הרגיל כן: הוצאות ממוצעות ${ils(r.mean.expenses)}). כל הסכומים לפי תאריך העסקה, מחשבונות שנכללים בסיכומים בלבד.`}>
+      note={`הכנסה טיפוסית = לכל מקור הכנסה מה שהוא נותן בחודש רגיל (משכורת קבועה = תשלום חציוני אחד לחודש; מקור לא סדיר = הסכום בתקופה חלקי מספר החודשים; חד־פעמי = לא נכלל). הוצאות = חציון ${r.monthsCount} החודשים, כך שחודש חריג אחד לא מזיז אותו (הממוצע הרגיל כן: ${ils(r.mean.expenses)}). כל הסכומים לפי תאריך העסקה, מחשבונות שנכללים בסיכומים בלבד — אותם מספרים כמו בטבלה החודשית בעמוד התקציבים.`}>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-        <Stat label="הכנסה בחודש מייצג" value={ils(med.income)} tone="text-emerald-300" sub={`ממוצע ${ils(r.mean.income)}`} />
-        <Stat label="הוצאות בחודש מייצג" value={ils(med.expenses)} tone="text-red-300" sub={`ממוצע ${ils(r.mean.expenses)}`} />
-        <Stat label={deficit ? 'חסר בחודש' : 'נשאר בחודש'} value={ils(Math.abs(med.net))} tone={deficit ? 'text-red-300' : 'text-emerald-300'}
-              sub={`טווח רגיל ${signed(r.netRange.p25)} … ${signed(r.netRange.p75)}`} />
+        <Stat label="הכנסה טיפוסית בחודש" value={ils(r.income)} tone="text-emerald-300" sub={`חציון חודשי ${ils(r.median.income)} · ממוצע ${ils(r.mean.income)}`} />
+        <Stat label="הוצאות בחודש מייצג" value={ils(r.expenses)} tone="text-red-300" sub={`ממוצע ${ils(r.mean.expenses)}`} />
+        <Stat label={deficit ? 'חסר בחודש' : 'נשאר בחודש'} value={ils(Math.abs(r.net))} tone={deficit ? 'text-red-300' : 'text-emerald-300'}
+              sub={`טווח בפועל ${signed(r.netRange.p25)} … ${signed(r.netRange.p75)}`} />
         <Stat label="תנודתיות ההוצאות" value={volLabel} tone={{ green: 'text-emerald-300', amber: 'text-amber-300', red: 'text-red-300' }[volTone]}
               sub={`הטוב: ${monthName(r.best.month)} ${signed(r.best.net)} · הגרוע: ${monthName(r.worst.month)} ${signed(r.worst.net)}`} />
       </div>
@@ -158,13 +190,43 @@ function RepresentativeCard({ r, window }) {
             <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} width={64} tickFormatter={v => ils(v)} />
             <Tooltip content={<ChartTip />} cursor={{ fill: '#ffffff08' }} />
             <ReferenceLine y={0} stroke="#4b5563" />
-            <ReferenceLine y={Math.round(med.net)} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: 'חציון', fill: '#60a5fa', fontSize: 11, position: 'insideTopLeft' }} />
-            <Bar dataKey="net" name="מאזן החודש" radius={[3, 3, 0, 0]}>
+            <ReferenceLine y={Math.round(r.net)} stroke="#60a5fa" strokeDasharray="4 4" label={{ value: 'חודש מייצג', fill: '#60a5fa', fontSize: 11, position: 'insideTopLeft' }} />
+            <Bar dataKey="net" name="מאזן החודש בפועל" radius={[3, 3, 0, 0]}>
               {chart.map(c => <Cell key={c.label} fill={c.net >= 0 ? '#34d399' : '#f87171'} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      <Details label={`הרכב ההכנסה (${r.incomeSources.length} מקורות)`}>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-gray-500 border-b border-gray-800">
+              <th className="text-right py-2 pl-2 font-medium">מקור</th>
+              <th className="text-right py-2 px-2 font-medium">סוג</th>
+              <th className="text-center py-2 px-2 font-medium">תשלומים / חודשים</th>
+              <th className="text-left py-2 px-2 font-medium">טיפוסי לחודש</th>
+              <th className="text-left py-2 pr-2 font-medium">חלק מההכנסה</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.incomeSources.map(src => {
+              const [label, tone] = KIND[src.kind]
+              return (
+                <tr key={src.key} className="border-b border-gray-800/50">
+                  <td className="py-1.5 pl-2 text-gray-200 max-w-0" style={{ width: '100%' }}><div className="truncate" dir="auto">{src.description}</div></td>
+                  <td className="py-1.5 px-2 whitespace-nowrap"><Chip tone={tone}>{label}</Chip>{src.jitter && <span className="text-gray-500 ms-1" title="תשלום שנחת בחודש הסמוך">תזמון</span>}</td>
+                  <td className="py-1.5 px-2 text-center text-gray-400 whitespace-nowrap" dir="ltr">{src.payments} / {src.monthsPresent}</td>
+                  <td className="py-1.5 px-2 font-mono text-left whitespace-nowrap text-gray-200">{src.kind === 'one-off' ? <span className="text-gray-600">— ({ils(src.total)} פעם אחת)</span> : ils(src.typical)}</td>
+                  <td className="py-1.5 pr-2 font-mono text-left text-gray-400">{pct(src.share)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <p className="text-xs text-gray-500 mt-2">מקורות עם תיאור דומה (למשל העברה מאותו משלם עם הערה שונה בכל פעם) מאוחדים לשורה אחת. אם מקור כאן הוא בעצם העברה מחשבון שלכם — סמנו את התנועה כהעברה פנימית בעמוד התנועות.</p>
+      </Details>
+      <Attention items={attention} />
     </Card>
   )
 }
@@ -240,6 +302,18 @@ function StructureCard({ s }) {
         </div>
       )}
 
+      <Attention items={[
+        s.verdict !== 'no-income' && (s.fixed.share < 0.4
+          ? `הקבועות הן ${pct(s.fixed.share)} מההכנסה — מרווח נוח (עד 40% נחשב נוח, 40–60% צפוף, מעל 60% מבני). המשמעות: יש הרבה חופש פעולה בהוצאות המשתנות, וזה בדיוק המקום שבו הפער נסגר או נפתח.`
+          : s.fixed.share < 0.6
+            ? `הקבועות הן ${pct(s.fixed.share)} מההכנסה — צפוף (עד 40% נחשב נוח). כל ירידה בהכנסה או הוצאה גדולה לא מתוכננת מורגשת מיד; שווה לבדוק אם יש התחייבות קבועה אחת שאפשר להקטין (ביטוח כפול, מנוי לא מנוצל, הלוואה שאפשר למחזר).`
+            : `הקבועות הן ${pct(s.fixed.share)} מההכנסה. בשיעור כזה חיסכון בקניות לא יסגור את הפער — ההחלטות שמשנות הן על ההתחייבויות הגדולות (דיור, רכב, הלוואות) או על ההכנסה.`),
+        s.verdict === 'behavioral' && `הפער נוצר בהוצאות המשתנות (${s.variable.topCategories.slice(0, 3).map(c => `${c.category} ${ils(c.avgPerMonth)}`).join(', ')}). החדשות הטובות: את אלה אפשר לשנות בלי לשנות את החיים — ראו בכרטיס #3 איפה הכסף הגדול ואיפה זו הצטברות של קטנות.`,
+        rec.changes.new.length > 0 && `חיוב חוזר חדש: ${rec.changes.new.map(c => `${c.description} (${ils(c.typical)} בחודש)`).join(', ')}. אם זה מנוי שלא תכננתם — ביטול שווה ${ils(rec.changes.new.reduce((a, c) => a + c.typical * 12, 0))} בשנה.`,
+        rec.changes.increased.length > 0 && `התייקרות: ${rec.changes.increased.map(c => `${c.description} ${ils(c.from)} → ${ils(c.to)}`).join(', ')}. לרוב זה סוף מבצע או עדכון מחירון — כדאי להתקשר ולבקש את המחיר הקודם, זה עובד לעיתים קרובות יותר ממה שנדמה.`,
+        rec.changes.gone.length > 0 && `${rec.changes.gone.length} חיובים קבועים לא הופיעו בחודשיים האחרונים (${rec.changes.gone.slice(0, 3).map(c => c.description).join(', ')}${rec.changes.gone.length > 3 ? '…' : ''}). אם בוטלו — זה חיסכון של ${ils(rec.changes.gone.reduce((a, c) => a + c.typical, 0))} בחודש שכדאי לוודא שלא "נבלע"; אם הם עונתיים (חוגים, קייטנה) — הם יחזרו, ותכננו אותם.`,
+      ]} />
+
       <Details label={`רשימת החיובים הקבועים שזוהו (${rec.merchants.length})`}>
         <table className="w-full text-xs">
           <tbody>
@@ -304,6 +378,12 @@ function DriversCard({ d, deficit }) {
           {d.overBudget.length ? d.overBudget.map(c => <Row key={c.category} c={c} over />) : <Empty>אין חריגות מהתקציב בקטגוריות מתוקצבות.</Empty>}
         </div>
       </div>
+      <Attention items={[
+        top.find(c => c.pattern === 'many-small') && (() => { const c = top.find(x => x.pattern === 'many-small'); return `${c.category}: ${n1(c.countPerMonth)} חיובים בחודש, ${ils(c.avgTicket)} בממוצע לחיוב. הבעיה כאן היא לא קנייה אחת גדולה אלא הצטברות — "להיזהר" לא עוזר, שינוי שיטה כן: רשימה מוכנה, ריכוז לקנייה שבועית אחת, או תקציב שבועי במקום חודשי.` })(),
+        top.find(c => c.pattern === 'few-large') && (() => { const c = top.find(x => x.pattern === 'few-large'); return `${c.category}: ${n1(c.countPerMonth)} חיובים בחודש בלבד — כל אחד הוא החלטה נפרדת וגדולה (${ils(c.avgTicket)} בממוצע). כאן אפשר לתכנן מראש ולהשוות מחירים; אין "בלי לשים לב".` })(),
+        d.overBudget.length > 0 && `החריגה מהתקציב מסתכמת ב־${ils(d.overBudget.reduce((a, c) => a + c.overAvg, 0))} בחודש ב־${d.overBudget.length} הסעיפים שמופיעים משמאל — זה הפער בין התוכנית למציאות. אם בסעיף מסוים החריגה קורית כמעט כל חודש, בדקו בכרטיס #4 אם התקציב שלו בכלל ריאלי.`,
+        top.length > 0 && `${pct(top.slice(0, 3).reduce((a, c) => a + c.share, 0))} מההוצאות יושבים ב־3 סעיפים. שינוי של 10% באחד מהם שווה יותר מביטול כל ההוצאות הקטנות ביחד — לכן מתחילים מהגדולים.`,
+      ]} />
     </Card>
   )
 }
@@ -322,6 +402,12 @@ function RealismCard({ b }) {
   return (
     <Card n={4} title="תקציב ריאלי או משאלת לב?" verdict={s.wishful ? `${s.wishful} משאלות לב` : 'התקציבים ריאליים'} tone={s.wishful ? 'red' : 'green'} headline={headline}
       note="משאלת לב = חריגה ב־⅔ מהחודשים לפחות והחציון גבוה מהתקציב ב־10%+. במקרה כזה יש שתי אפשרויות אמיתיות: לשנות התנהלות, או להעלות את התקציב למספר שמתאר אותכם — ואז לקבל את המשמעות במאזן. רפוי = חריגה נדירה והחציון נמוך מ־70% מהתקציב.">
+      <Attention items={[
+        s.wishful > 0 && `${b.rows.filter(r => r.verdict === 'wishful').map(r => `${r.category} (תקציב ${ils(r.budget)}, בפועל ${ils(r.median)})`).join(', ')} — תקציב שחורגים ממנו כמעט כל חודש מפסיק לשמש ככלי; מתרגלים להתעלם ממנו. יש רק שתי אפשרויות אמיתיות: להחליט על צעד קונקרטי בסעיף (מה בדיוק משתנה מהחודש הבא), או לעדכן את התקציב למספר האמיתי ולקבל את המשמעות במאזן. אמצע הדרך לא קיים.`,
+        s.loose > 0 && `${b.rows.filter(r => r.verdict === 'loose').map(r => r.category).join(', ')}: התקציב גבוה בהרבה מההוצאה בפועל — יחד "מסתירים" ${ils(b.rows.filter(r => r.verdict === 'loose').reduce((a, r) => a + (r.budget - r.median), 0))} בחודש שנראים כמו הוצאה מתוכננת אבל לא יוצאים. אפשר להוריד את התקציבים האלה ולהפנות את ההפרש לחיסכון או להפרשה להוצאות לא שוטפות (#6).`,
+        s.realistic > 0 && s.wishful === 0 && s.loose === 0 && 'כל התקציבים מתארים את המציאות — זה השלב שבו אפשר להתחיל להוריד אותם בהדרגה (5% בסעיף אחד) ולראות אם זה מחזיק.',
+        b.rows.some(r => r.monthsOver > 0 && r.monthsOver < r.monthsBudgeted && r.verdict === 'realistic') && 'סעיף שחורג "לפעמים" (חשבונות דו־חודשיים כמו מים/ארנונה/גז) יראה חודש כן וחודש לא — זה תזמון, לא חריגה. לסעיפים כאלה עדיף תקציב של הממוצע הדו־חודשי חלקי 2.',
+      ]} />
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -342,7 +428,7 @@ function RealismCard({ b }) {
                   <td className="py-2 pl-2 text-gray-200"><span className="inline-flex items-center gap-1.5"><CatDot name={r.category} />{r.category}</span></td>
                   <td className="py-2 px-2 font-mono text-gray-300 text-left">{ils(r.budget)}</td>
                   <td className={`py-2 px-2 font-mono text-left ${r.median > r.budget ? 'text-red-300' : 'text-gray-300'}`}>{ils(r.median)}<span className="text-gray-600"> ({pct(r.ratio)})</span></td>
-                  <td className="py-2 px-2 text-center text-gray-300">{r.monthsOver} / {r.monthsBudgeted}</td>
+                  <td className="py-2 px-2 text-center text-gray-300" dir="ltr">{r.monthsOver} / {r.monthsBudgeted}</td>
                   <td className="py-2 px-2"><Chip tone={tone}>{label}</Chip></td>
                   <td className="py-2 pr-2 font-mono text-left text-blue-300">{r.suggested != null ? ils(r.suggested) : <span className="text-gray-600">—</span>}</td>
                 </tr>
@@ -396,6 +482,17 @@ function ProgressCard({ p }) {
         </div>
         <Period t={p.recent} title="לאחרונה" tone="bg-blue-900/20 border border-blue-800/30" />
       </div>
+      <Attention items={[
+        p.verdict === 'worsening' && p.movers.up.length > 0 && `העלייה מרוכזת ב־${p.movers.up.map(m => m.category).join(', ')}. אם זו הוצאה עונתית (חופשה, חגים, ציוד לבית ספר) — אין כאן מגמה, ואפשר לבדוק שוב בעוד חודשיים. אם היא נמשכת גם בחודש רגיל — זו כבר ההתנהלות החדשה.`,
+        p.verdict === 'improving' && (p.delta.expenses < 0
+          ? `ההוצאות ירדו ב־${ils(-p.delta.expenses)} בחודש${p.movers.down.length ? ` — בעיקר ${p.movers.down.map(m => m.category).join(', ')}` : ''}. כדי שהשיפור לא "ייבלע": ודאו שהסכום מופיע כחיסכון בפועל (הפקדה קבועה או יתרה שעולה).`
+          : `המאזן השתפר ב־${ils(p.delta.net)} בחודש, אבל ההוצאות דווקא עלו ב־${ils(p.delta.expenses)} — השיפור מגיע מצד ההכנסות (${signed(p.delta.income)} בחודש; הכנסות חד־פעמיות כבר הוצאו מהחישוב). שיפור שנשען על הכנסה ולא על הוצאות מחזיק רק כל עוד ההכנסה נשארת.`),
+        p.delta.breachesPerMonth > 0.5 && `מספר החריגות מהתקציב עלה מ־${n1(p.previous.breachesPerMonth)} ל־${n1(p.recent.breachesPerMonth)} בחודש. אם אלה אותם סעיפים כל חודש — זו בעיית תקציב (כרטיס #4), לא בעיית התנהגות.`,
+        p.delta.breachesPerMonth < -0.5 && `פחות חריגות מהתקציב (${n1(p.previous.breachesPerMonth)} → ${n1(p.recent.breachesPerMonth)} בחודש) — התקציב מתחיל לעבוד ככלי.`,
+        p.delta.otherShare < -0.02 && `חלק ההוצאות ב"אחר" ירד מ־${pct(p.previous.otherShare)} ל־${pct(p.recent.otherShare)} — הרישום מדויק יותר, וזה שיפור בפני עצמו: מה שלא מסווג אי אפשר לנהל.`,
+        p.recent.otherShare > 0.05 && `${pct(p.recent.otherShare)} מההוצאות לאחרונה יושבים ב"אחר" — ככל שזה גדל, התובנות כאן פחות מדויקות. כמה דקות בעמוד התנועות (סינון לפי "אחר" + כלל לספק) משפרות את כל השאר.`,
+        p.delta.income < -0.03 * Math.max(p.previous.income, 1) && `ההכנסה ירדה ב־${ils(-p.delta.income)} בחודש בין התקופות. לפני שמסיקים — בדקו אם זה תזמון משכורות (כרטיס #1) או ירידה אמיתית.`,
+      ]} />
       {(p.movers.up.length + p.movers.down.length) > 0 && (
         <div className="grid gap-3 lg:grid-cols-2 mt-3 text-sm">
           <div>
@@ -461,6 +558,12 @@ function PeriodicCard({ p }) {
           </div>
         </div>
       </div>
+      <Attention items={[
+        p.items.length > 0 && `איך עושים את זה בפועל: פותחים סעיף תקציב בשם "לא שוטף" (או חשבון חיסכון נפרד) ומעבירים אליו ${ils(p.provision)} בכל חודש. כשמגיע ביטוח שנתי או טיפול לרכב — משלמים משם, לא מהמינוס. ככה החודש ה"רגיל" נשאר רגיל.`,
+        p.items.length > 0 && `${pct(p.shareOfExpenses)} מההוצאות בתקופה היו כאלה. אם המספר הזה מפתיע — זו בדיוק הסיבה שהתקציב החודשי "לא מסתדר" למרות שכל סעיף בנפרד נראה בסדר.`,
+        missingMonths(p.coverage.months).length > 0 && `התקופה לא כוללת את ${missingMonths(p.coverage.months).join(', ')}. הוצאות שנתיות שנופלות בחודשים האלה (חגים, ביטוחים שמתחדשים, חופשות, תחילת שנת לימודים) לא נספרו — ההפרשה האמיתית כנראה גבוהה יותר. בחרו "12 חודשים" כשיצטברו נתונים לשנה מלאה.`,
+        p.lumpyCategories.length > 0 && `${p.lumpyCategories.map(c => c.category).join(', ')} — סעיפים "קופצניים": חודש שקט ואז חודש כפול. לסעיף כזה תקציב חודשי קבוע תמיד ייראה "בחריגה" בחודש הגדול; עדיף להסתכל עליו בממוצע של 3 חודשים (עמוד ההשוואה) ולתקצב לפי הממוצע.`,
+      ]} />
     </Card>
   )
 }
@@ -519,6 +622,17 @@ function InstallmentsCard({ s }) {
           </div>
         </div>
       )}
+      <Attention items={[
+        hasPlans && s.shareOfIncome != null && (s.shareOfIncome < 0.05
+          ? `${pct(s.shareOfIncome)} מההכנסה הולכים לתשלומים — רגיל (עד 5%). התשלומים עצמם בלי ריבית, אבל הם "מקטינים" את ההכנסה הפנויה של החודשים הבאים עוד לפני שהם התחילו.`
+          : s.shareOfIncome < 0.1
+            ? `${pct(s.shareOfIncome)} מההכנסה הולכים לתשלומים — ראוי לתשומת לב (5–10%). כל תוכנית חדשה מצטרפת לקיימות; לפני הבאה, שווה לחכות שתסתיים אחת.`
+            : `${pct(s.shareOfIncome)} מההכנסה הולכים לתשלומים — גבוה (מעל 10%). זה אומר שחלק מהקנייה של החודש משולם מהכנסה של חודשים שכבר "תפוסים". ההמלצה הרגילה: הקפאת תוכניות חדשות עד שהנטל יורד מתחת ל־5%.`),
+        s.endingSoon.length > 0 && `כש${s.endingSoon.length === 1 ? 'תסתיים התוכנית' : `יסתיימו ${s.endingSoon.length} התוכניות`} (עד ${monthLong(s.endingSoon[s.endingSoon.length - 1].endMonth)}) יתפנו ${ils(s.endingSoon.reduce((a, p) => a + p.perMonth, 0))} בחודש. הסכום הזה נוטה "להיעלם" בחזרה לצריכה — אם רוצים שירגישו אותו, הפנו אותו מראש להפרשה (#6) או לחיסכון.`,
+        s.newInWindow.count >= 3 && `נפתחו ${s.newInWindow.count} תוכניות בתקופה — תשלומים חדשים נכנסים בקצב שבו ישנים נסגרים. זה הופך את התשלומים מכלי חד־פעמי לשכבה קבועה של ${ils(s.monthlyBurden)} בחודש; שווה להחליט אם זה מכוון.`,
+        s.liabilities.length > 0 && `ההלוואות מגיליון הנכסים (${ils(s.liabilitiesTotal)}) מתעדכנות ידנית — כדי שהמספר יהיה שימושי, עדכנו יתרה פעם בחודש בעמוד "נכסים". ההחזר החודשי שלהן מופיע כבר בהוצאות הקבועות (#2) אם הוא יורד מחשבון שנכלל בסיכומים.`,
+        s.stalePlans.length > 0 && `${s.stalePlans.length} תוכניות לא נראו 3 חודשים ומעלה בלי שהסתיימו — כנראה כרטיס שלא מסונכרן או תוכנית שבוטלה. אם הכרטיס פעיל, הריצו "עדכון" בעמוד החשבונות כדי שהתחזית תהיה שלמה.`,
+      ]} />
       {(s.liabilities.length > 0 || s.stalePlans.length > 0 || s.unknown.count > 0) && (
         <div className="mt-3 grid gap-2 lg:grid-cols-3 text-xs">
           {s.liabilities.length > 0 && (
@@ -551,9 +665,9 @@ function InstallmentsCard({ s }) {
 function Summary({ d }) {
   const r = d.representative, s = d.structure, dr = d.drivers, b = d.budgetRealism, p = d.progress, pe = d.periodic, ins = d.installments
   if (!r.enough) return null
-  const deficit = r.median.net < 0
+  const deficit = r.net < 0
   const lines = []
-  lines.push(['כך נראה החודש הרגיל שלכם', `הכנסה ${ils(r.median.income)}, הוצאות ${ils(r.median.expenses)} — ${deficit ? `חסרים ${ils(-r.median.net)}` : `נשארים ${ils(r.median.net)}`} בחודש${s.verdict === 'structural' ? ', והבעיה מבנית (התחייבויות קבועות)' : s.verdict === 'behavioral' ? ', והפער נובע מהוצאות משתנות' : ''}.`])
+  lines.push(['כך נראה החודש הרגיל שלכם', `הכנסה ${ils(r.income)}, הוצאות ${ils(r.expenses)} — ${deficit ? `חסרים ${ils(-r.net)}` : `נשארים ${ils(r.net)}`} בחודש${s.verdict === 'structural' ? ', והבעיה מבנית (התחייבויות קבועות)' : s.verdict === 'behavioral' ? ', והפער נובע מהוצאות משתנות' : ''}.`])
   if (dr.top.length) {
     const src = deficit && dr.overBudget.length ? dr.overBudget : dr.top
     lines.push([deficit ? 'שלושת הדברים שיוצרים את הפער' : 'שלושת הסעיפים הגדולים', src.slice(0, 3).map(c => `${c.category} (${ils(deficit && dr.overBudget.length ? c.overAvg : c.avgPerMonth)}${deficit && dr.overBudget.length ? ' מעל התקציב' : ''})`).join(', ') + '.'])
@@ -631,7 +745,7 @@ export default function InsightsPage() {
           <div className="space-y-6">
             <RepresentativeCard r={data.representative} window={w} />
             <StructureCard s={data.structure} />
-            <DriversCard d={data.drivers} deficit={data.representative.enough && data.representative.median.net < 0} />
+            <DriversCard d={data.drivers} deficit={data.representative.enough && data.representative.net < 0} />
             <RealismCard b={data.budgetRealism} />
             <ProgressCard p={data.progress} />
             <PeriodicCard p={data.periodic} />

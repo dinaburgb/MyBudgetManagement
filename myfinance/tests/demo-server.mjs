@@ -57,7 +57,9 @@ MONTHS.forEach((m, i) => {
   const partial = !complete(m)
   const maxDay = partial ? 12 : 28
   // Income
-  bankTxns.push(t(m, 1, 'משכורת - חברת הייטק בע"מ', 14200, 'הכנסות'))
+  // Salary normally on the 1st; in May it landed on April 30th (a real-life timing quirk)
+  if (m === '2026-05') bankTxns.push(t('2026-04', 30, 'משכורת - חברת הייטק בע"מ', 14200, 'הכנסות'))
+  else bankTxns.push(t(m, 1, 'משכורת - חברת הייטק בע"מ', 14200, 'הכנסות'))
   if (!partial) bankTxns.push(t(m, 10, 'משכורת - עיריית ת"א', 9600, 'הכנסות'))
   // Fixed bills (bank)
   bankTxns.push(t(m, 2, 'משכנתא בנק מזרחי', -5800, 'הלוואות ומשכנתאות'))
@@ -84,6 +86,7 @@ MONTHS.forEach((m, i) => {
   if (!partial) cardTxns.push(t(m, 17, 'לא מסווג ' + i, -Math.round(between(100, 400)), 'אחר'))
 })
 // One-offs / periodic
+bankTxns.push(t('2026-06', 12, 'זיכוי זה"ב מ-חשבון חיסכון', 15000, 'הכנסות'))     // own transfer filed as income
 cardTxns.push(t('2026-03', 20, 'ד"ר כהן - רופא שיניים', -1500, 'בריאות'))
 bankTxns.push(t('2026-04', 14, 'מגדל - ביטוח בריאות שנתי', -2400, 'ביטוח ופיננסים'))
 cardTxns.push(t('2026-06', 21, 'מוסך רמי - טיפול 30,000', -1850, 'רכב'))

@@ -2,8 +2,9 @@
  * Insights — a monthly-level reading of the family's finances that goes beyond
  * "you overspent on food". Seven questions, each answered from the transactions:
  *
- *   1. representative  — what does a NORMAL month look like (median, not mean),
- *                        how big is the real monthly gap, how volatile are we?
+ *   1. representative  — what does a NORMAL month look like (typical income per
+ *                        payer, median expenses — not the mean), how big is the
+ *                        real monthly gap, how volatile are we?
  *   2. structure       — is a deficit structural (fixed obligations eat the
  *                        income) or behavioural (variable spending)?
  *   3. drivers         — which 3–4 categories create the gap: amount AND frequency
@@ -177,21 +178,95 @@ export function monthlyTotals(rows, months, incomeSet) {
 }
 
 /**
- * The "normal" month: medians (a single unusual month doesn't move them), the
- * mean for comparison, the annualised gap, and how volatile the months are.
+ * Where the income comes from, payer by payer, and what each one contributes to
+ * a TYPICAL month. Salaries land on the 1st one month and the 31st the next, so
+ * a raw monthly series shows months with zero or two salaries; per payer we
+ * therefore look at the payments themselves:
+ *   'regular'   about one payment a month (N−1 … N+1 payments in N months — the
+ *               +1 is a payment that slid across a month boundary) of a stable
+ *               amount → typical = the median payment, once a month
+ *   'irregular' anything else (self-employment, occasional or variable credits)
+ *               → total ÷ N
+ *   'one-off'   a single payment in a window of ≥4 months → NOT part of a
+ *               typical month; listed separately so it can be reviewed
+ *               (often a transfer from one's own account filed as income).
+ * typicalIncome = Σ typical over the non-one-off payers.
  *
- * gap = median income − median expenses (positive = surplus, negative = deficit).
+ * Bank transfer descriptions carry a free-text memo ("העברה מ… — משכורת",
+ * "… — מקדמה"), so payers are clustered by a shared prefix of ≥3 words.
+ */
+export function incomeComposition(rows, months, incomeSet) {
+  const N = months.length
+  const payers = new Map()
+  const clusterKey = k => {
+    const words = k.split(' ')
+    for (const existing of payers.keys()) {
+      const ew = existing.split(' ')
+      let i = 0
+      while (i < words.length && i < ew.length && words[i] === ew[i]) i++
+      if (i >= 3) return existing
+    }
+    return k
+  }
+  for (const r of rows) {
+    if (!isIncome(r, incomeSet)) continue
+    const raw = normalizeMerchant(r.description)
+    if (!raw) continue
+    const key = clusterKey(raw)
+    if (!payers.has(key)) payers.set(key, { key, descriptions: new Map(), payments: [], months: new Set(), total: 0 })
+    const p = payers.get(key)
+    p.payments.push(r.amount); p.months.add(r.month); p.total += r.amount
+    p.descriptions.set(r.description, (p.descriptions.get(r.description) || 0) + 1)
+  }
+  const grand = [...payers.values()].reduce((s, p) => s + p.total, 0)
+  const sources = [...payers.values()].map(p => {
+    const n = p.payments.length
+    const med = median(p.payments)
+    const mad = med > 0 ? median(p.payments.map(v => Math.abs(v - med))) / med : 0
+    let kind, typical
+    if (n === 1 && N >= 4) { kind = 'one-off'; typical = 0 }
+    else if (n >= N - 1 && n <= N + 1 && mad <= 0.25) { kind = 'regular'; typical = med }
+    else { kind = 'irregular'; typical = p.total / N }
+    return {
+      key: p.key,
+      description: [...p.descriptions.entries()].sort((a, b) => b[1] - a[1])[0][0],
+      payments: n, monthsPresent: p.months.size, total: p.total,
+      medianPayment: median(p.payments),
+      // A regular payer with more payments than months → a payment slid across a
+      // month boundary (paid on the 31st / 1st) — the chart's zig-zag, not real change.
+      jitter: kind === 'regular' && n > p.months.size,
+      kind, typical, share: grand > 0 ? p.total / grand : 0,
+    }
+  }).sort((a, b) => b.total - a.total)
+  const oneOff = sources.filter(s => s.kind === 'one-off')
+  return {
+    sources,
+    typicalIncome: sources.reduce((s, p) => s + p.typical, 0),
+    oneOff: { items: oneOff, total: oneOff.reduce((s, p) => s + p.total, 0) },
+    hasJitter: sources.some(s => s.jitter),
+  }
+}
+
+/**
+ * The "normal" month. Income is the per-payer typical income (see
+ * incomeComposition — immune to salary timing and one-off credits); expenses
+ * are the median month (a single unusual month doesn't move it); the mean is
+ * reported for comparison.
+ *
+ * net = typical income − median expenses (positive = surplus, negative = deficit).
  * Volatility is the coefficient of variation of monthly expenses; outliers are
  * months more than 20% away from the median. pattern says whether the noise is
  * one exceptional month ('one-off') or a different surprise every month
  * ('every-month').
  */
-export function representativeMonth(totals) {
+export function representativeMonth(totals, composition = null) {
   const N = totals.length
   const inc = totals.map(t => t.income), exp = totals.map(t => t.expenses), net = totals.map(t => t.net)
   const med = { income: median(inc), expenses: median(exp) }
   med.net = med.income - med.expenses
   const avg = { income: mean(inc), expenses: mean(exp), net: mean(net) }
+  const income = composition ? composition.typicalIncome : med.income
+  const expenses = med.expenses
 
   const cv = avg.expenses > 0 ? stdev(exp) / avg.expenses : 0
   const outliers = totals
@@ -208,10 +283,14 @@ export function representativeMonth(totals) {
     enough: N >= 3,
     monthsCount: N,
     months: totals,
+    income, expenses, net: income - expenses,
     median: med,
     mean: avg,
-    annualizedNet: med.net * 12,
+    annualizedNet: (income - expenses) * 12,
     netRange: { p25: quantile(net, 0.25), p75: quantile(net, 0.75) },
+    incomeSources: composition ? composition.sources : [],
+    oneOffIncome: composition ? composition.oneOff : { items: [], total: 0 },
+    incomeJitter: composition ? composition.hasJitter : false,
     best:  byNet.length ? { month: byNet[byNet.length - 1].month, net: byNet[byNet.length - 1].net } : null,
     worst: byNet.length ? { month: byNet[0].month, net: byNet[0].net } : null,
     volatility: { cv, level, pattern, outliers },
@@ -356,7 +435,7 @@ export function detectRecurring(rows, months, incomeSet) {
  *                       nothing for variable spending
  *          'behavioral' fixed leave room, but variable spending exceeds it
  */
-export function spendingStructure(rows, months, incomeSet, totals, recurring) {
+export function spendingStructure(rows, months, incomeSet, totals, recurring, typicalIncome = null) {
   const N = months.length
   const fixedByMonth = new Map(months.map(m => [m, { recurring: recurring.byMonth.get(m) || 0, installments: 0 }]))
   const variableByCat = new Map()
@@ -375,7 +454,9 @@ export function spendingStructure(rows, months, incomeSet, totals, recurring) {
     return { month: m, income: t.income, expenses: t.expenses, recurring: f.recurring, installments: f.installments, fixed, variable: Math.max(0, t.expenses - fixed) }
   })
 
-  const income   = median(series.map(s => s.income))
+  // Income: the per-payer typical income when given (see incomeComposition —
+  // salary timing and one-off credits don't distort it), else the median month.
+  const income   = typicalIncome != null ? typicalIncome : median(series.map(s => s.income))
   const expenses = median(series.map(s => s.expenses))
   const recurringMed    = median(series.map(s => s.recurring))
   const installmentsMed = median(series.map(s => s.installments))
@@ -528,16 +609,22 @@ export function budgetRealism(rows, months, incomeSet, limits) {
  * average expenses, income, net, budget breaches per month and the share of
  * spending left in the catch-all category (a proxy for bookkeeping accuracy).
  * Movers are the categories that changed most (≥15% and ≥ max(100, 1% of
- * monthly spend)).
+ * monthly spend)). One-off income (see incomeComposition) is left out of the
+ * period income so a single transfer can't masquerade as "improvement".
  */
-export function progress(rows, months, incomeSet, limits, totals) {
+export function progress(rows, months, incomeSet, limits, totals, oneOffKeys = new Set()) {
   const N = months.length
   if (N < 4) return { enough: false, monthsCount: N }
   const half = Math.floor(N / 2)
   const recentMonths = months.slice(-half), previousMonths = months.slice(0, N - half)
 
   const spent = new Map()   // 'cat|month' -> spent
+  const oneOffByMonth = new Map()
   for (const r of rows) {
+    if (isIncome(r, incomeSet) && oneOffKeys.has(normalizeMerchant(r.description))) {
+      oneOffByMonth.set(r.month, (oneOffByMonth.get(r.month) || 0) + r.amount)
+      continue
+    }
     if (!isExpense(r, incomeSet)) continue
     const k = `${r.category}|${r.month}`
     spent.set(k, (spent.get(k) || 0) + -r.amount)
@@ -546,7 +633,8 @@ export function progress(rows, months, incomeSet, limits, totals) {
 
   function period(ms) {
     const ts = totals.filter(t => ms.includes(t.month))
-    const expenses = mean(ts.map(t => t.expenses)), income = mean(ts.map(t => t.income))
+    const expenses = mean(ts.map(t => t.expenses))
+    const income = mean(ts.map(t => t.income - (oneOffByMonth.get(t.month) || 0)))
     let breaches = 0, other = 0
     for (const m of ms) {
       other += spent.get(`${OTHER_CATEGORY}|${m}`) || 0
@@ -773,14 +861,15 @@ export function computeInsights(db = getDb(), { monthsBack = 6, now = new Date()
   const limits = effectiveLimitsByMonth(db, months)
 
   const totals = monthlyTotals(rows, months, incomeSet)
-  const representative = representativeMonth(totals)
+  const composition = incomeComposition(rows, months, incomeSet)
+  const representative = representativeMonth(totals, composition)
   const recurring = detectRecurring(rows, months, incomeSet)
-  const structure = spendingStructure(rows, months, incomeSet, totals, recurring)
+  const structure = spendingStructure(rows, months, incomeSet, totals, recurring, composition.typicalIncome)
   const drivers = gapDrivers(rows, months, incomeSet, limits)
   const realism = budgetRealism(rows, months, incomeSet, limits)
-  const prog = progress(rows, months, incomeSet, limits, totals)
+  const prog = progress(rows, months, incomeSet, limits, totals, new Set(composition.oneOff.items.map(i => i.key)))
   const periodic = periodicExpenses(rows, months, incomeSet, recurring, representative.mean.expenses)
-  const installments = installmentsInsight(db, { now, windowMonths: months, incomeMedian: representative.median.income })
+  const installments = installmentsInsight(db, { now, windowMonths: months, incomeMedian: representative.income })
 
   const { recurringKeys, byMonth, ...recurringOut } = recurring
   return {

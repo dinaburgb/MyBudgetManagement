@@ -13,7 +13,7 @@ import { seedCategories } from '../server/db/categories.js'
 import { setBudget, effectiveLimitsByMonth } from '../server/db/budgets.js'
 import {
   median, quantile, addMonths, monthKey, completeMonths, normalizeMerchant,
-  monthlyTotals, representativeMonth, detectRecurring, spendingStructure,
+  monthlyTotals, representativeMonth, incomeComposition, detectRecurring, spendingStructure,
   gapDrivers, budgetRealism, progress, periodicExpenses, installmentsInsight,
   computeInsights,
 } from '../server/db/insights.js'
@@ -127,6 +127,69 @@ test('representative month uses medians so one outlier month does not move it', 
   assert.strictEqual(rep.volatility.outliers.length, 1)
   assert.strictEqual(rep.volatility.outliers[0].month, '2026-07')
   assert.strictEqual(rep.volatility.pattern, 'one-off')
+})
+
+test('income composition: salary timing jitter, one-offs, sporadic and frequent payers', () => {
+  const db = freshDb()
+  const txns = []
+  // Salary paid 7 times in 6 months but only in 4 distinct months (31st vs 1st)
+  ;[['2026-03', 1], ['2026-03', 31], ['2026-05', 1], ['2026-05', 31], ['2026-06', 30], ['2026-08', 1], ['2026-08', 31]]
+    .forEach(([m, d]) => txns.push(txn(m, 'משכורת פועלים', 12000, 'הכנסות', { day: d })))
+  txns.push(txn('2026-05', 'זיכוי זהב מעצמי', 40000, 'הכנסות'))                        // one-off transfer filed as income
+  ;['2026-04', '2026-07'].forEach(m => txns.push(txn(m, 'חשבונית לקוח', 3000, 'הכנסות')))   // sporadic self-employment
+  MONTHS.forEach(m => [5, 15, 25].forEach(d => txns.push(txn(m, 'cashback', 50, 'הכנסות', { day: d }))))  // frequent
+  // Own company paying with a different memo every time — one payer, clustered by prefix
+  ;[['2026-03', 'העברה מב.ד.ס.י. השקעות - משכורת'], ['2026-04', 'העברה מב.ד.ס.י. השקעות - מקדמה משכורת'],
+    ['2026-06', 'העברה מב.ד.ס.י. השקעות - משכורת הבראה'], ['2026-08', 'העברה מב.ד.ס.י. השקעות - השלמה']]
+    .forEach(([m, d]) => txns.push(txn(m, d, 2500, 'הכנסות', { day: 20 })))
+  save(db, txns)
+  const rows = windowRows(db, MONTHS)
+  const c = incomeComposition(rows, MONTHS, INCOME)
+  const by = Object.fromEntries(c.sources.map(x => [x.description, x]))
+  assert.strictEqual(by['משכורת פועלים'].kind, 'regular')
+  assert.strictEqual(by['משכורת פועלים'].typical, 12000)            // one salary a month, not 7/6 or 1.5
+  assert.strictEqual(by['משכורת פועלים'].jitter, true)
+  assert.strictEqual(by['משכורת פועלים'].monthsPresent, 4)
+  assert.strictEqual(by['זיכוי זהב מעצמי'].kind, 'one-off')
+  assert.strictEqual(by['זיכוי זהב מעצמי'].typical, 0)
+  assert.strictEqual(by['חשבונית לקוח'].kind, 'irregular')
+  assert.strictEqual(by['חשבונית לקוח'].typical, 1000)              // 6000 / 6
+  assert.strictEqual(by['cashback'].kind, 'irregular')
+  assert.strictEqual(by['cashback'].typical, 150)                    // 18 × 50 / 6
+  const company = c.sources.find(x => x.description.startsWith('העברה מב.ד.ס.י'))
+  assert.strictEqual(company.payments, 4)                            // four memos, one payer
+  assert.strictEqual(company.kind, 'irregular')                      // 4 payments < N−1
+  assert.ok(Math.abs(company.typical - 10000 / 6) < 1e-9)
+  assert.strictEqual(c.sources.filter(x => x.description.startsWith('העברה מב.ד.ס.י')).length, 1)
+  assert.ok(Math.abs(c.typicalIncome - (12000 + 1000 + 150 + 10000 / 6)) < 1e-9)
+  assert.deepStrictEqual(c.oneOff.items.map(x => x.description), ['זיכוי זהב מעצמי'])
+  assert.strictEqual(c.oneOff.total, 40000)
+  assert.strictEqual(c.hasJitter, true)
+  assert.strictEqual(c.sources[0].description, 'משכורת פועלים')       // biggest first
+  assert.ok(Math.abs(c.sources[0].share - 84000 / (84000 + 40000 + 6000 + 900 + 10000)) < 1e-9)
+
+  // The representative month uses the typical income, not the lumpy median.
+  const totals = monthlyTotals(rows, MONTHS, INCOME)
+  const rep = representativeMonth(totals, c)
+  assert.ok(Math.abs(rep.income - c.typicalIncome) < 1e-9)
+  assert.ok(rep.median.income !== rep.income)                        // raw median is distorted (0/2-salary months)
+  assert.strictEqual(rep.net, rep.income - rep.expenses)
+  assert.strictEqual(rep.annualizedNet, rep.net * 12)
+  assert.strictEqual(rep.incomeJitter, true)
+  assert.strictEqual(rep.oneOffIncome.total, 40000)
+  // ...and the structure verdict is judged against the same income.
+  const rec = detectRecurring(rows, MONTHS, INCOME)
+  const st = spendingStructure(rows, MONTHS, INCOME, totals, rec, c.typicalIncome)
+  assert.ok(Math.abs(st.income - c.typicalIncome) < 1e-9)
+})
+
+test('income composition: with a short window a single payment is not treated as one-off', () => {
+  const db = freshDb()
+  const three = MONTHS.slice(-3)
+  save(db, [txn('2026-08', 'בונוס', 3000, 'הכנסות')])
+  const c = incomeComposition(windowRows(db, three), three, INCOME)
+  assert.strictEqual(c.sources[0].kind, 'irregular')
+  assert.strictEqual(c.sources[0].typical, 1000)
 })
 
 test('representative month: a flat family is stable, a wild one is volatile', () => {
@@ -350,6 +413,22 @@ test('progress: rising expenses → worsening; too few months → not enough', (
   assert.strictEqual(progressFor(db, MONTHS.slice(-3)).enough, false)
 })
 
+test('progress: a one-off income in the recent half does not count as improvement', () => {
+  const db = freshDb(); normalFamily(db)
+  save(db, [txn('2026-07', 'העברה מחיסכון', 30000, 'הכנסות')])
+  const rows = windowRows(db, MONTHS)
+  const totals = monthlyTotals(rows, MONTHS, INCOME)
+  const limits = effectiveLimitsByMonth(db, MONTHS)
+  const naive = progress(rows, MONTHS, INCOME, limits, totals)
+  assert.strictEqual(naive.verdict, 'improving')                     // fooled by the transfer
+  const c = incomeComposition(rows, MONTHS, INCOME)
+  const p = progress(rows, MONTHS, INCOME, limits, totals, new Set(c.oneOff.items.map(i => i.key)))
+  assert.strictEqual(p.verdict, 'flat')
+  assert.strictEqual(p.recent.income, 20000)
+  const e2e = computeInsights(db, { monthsBack: 6, now: NOW })
+  assert.strictEqual(e2e.progress.verdict, 'flat')
+})
+
 test('progress: same spending both halves → flat', () => {
   const db = freshDb(); normalFamily(db)
   assert.strictEqual(progressFor(db).verdict, 'flat')
@@ -464,6 +543,7 @@ test('computeInsights: end-to-end over a fixture, JSON-serialisable, window resp
   assert.deepStrictEqual(r.window.months, MONTHS)
   assert.strictEqual(r.window.currentMonth, '2026-09')
   assert.strictEqual(r.representative.median.income, 20000)
+  assert.strictEqual(r.representative.income, 20000)                 // regular salary → typical = median
   assert.strictEqual(r.structure.verdict, 'balanced')
   assert.ok(r.structure.recurring.merchants.length >= 3)
   assert.ok(Array.isArray(r.drivers.top))
