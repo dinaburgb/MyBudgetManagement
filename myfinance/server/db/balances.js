@@ -6,8 +6,13 @@
 import { getDb } from './database.js'
 import { notExcludedSql } from './subaccounts.js'
 
-/** Insert or update the balance for one account number. */
+/**
+ * Insert or update the balance for one account number, and append it to the
+ * per-day history (a second sync on the same day overwrites that day's row).
+ * Null balances (credit cards) update the latest-balance row but leave no history.
+ */
 export function upsertBalance(db, accountId, accountNumber, balance, dateISO) {
+  const value = balance == null ? null : Number(balance)
   db.prepare(`
     INSERT INTO account_balances (account_id, account_number, balance, balance_date)
     VALUES (?, ?, ?, ?)
@@ -15,7 +20,39 @@ export function upsertBalance(db, accountId, accountNumber, balance, dateISO) {
     DO UPDATE SET balance = excluded.balance,
                   balance_date = excluded.balance_date,
                   updated_at = datetime('now')
-  `).run(accountId, accountNumber, balance == null ? null : Number(balance), dateISO)
+  `).run(accountId, accountNumber, value, dateISO)
+  if (value == null || !Number.isFinite(value)) return
+  const day = localDay(dateISO)
+  db.prepare(`
+    INSERT INTO account_balance_history (account_id, account_number, day, balance, balance_date)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, account_number, day)
+    DO UPDATE SET balance = excluded.balance, balance_date = excluded.balance_date
+  `).run(accountId, accountNumber, day, value, dateISO)
+}
+
+/** 'YYYY-MM-DD' in local time for an ISO timestamp (falls back to today). */
+function localDay(dateISO) {
+  const d = dateISO ? new Date(dateISO) : new Date()
+  const t = Number.isNaN(d.getTime()) ? new Date() : d
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Balance history for the included accounts, oldest first — the raw material for
+ * a balance-over-time chart. Returns [{ day, account_id, account_number, balance }].
+ */
+export function balanceHistory(db = getDb(), accountIds = null) {
+  const notExcluded = notExcludedSql('h.account_id', 'h.account_number')
+  const where = accountIds && accountIds.length
+    ? `h.account_id IN (${accountIds.map(() => '?').join(',')})`
+    : `h.account_id IN (SELECT id FROM accounts WHERE include_in_totals = 1)`
+  return db.prepare(`
+    SELECT h.day, h.account_id, h.account_number, h.balance
+    FROM account_balance_history h
+    WHERE ${where} AND ${notExcluded}
+    ORDER BY h.day, h.account_id, h.account_number
+  `).all(...(accountIds && accountIds.length ? accountIds : []))
 }
 
 /**

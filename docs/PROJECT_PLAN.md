@@ -385,8 +385,73 @@ Status of each bank / card integration:
     currencies. Pre-existing behaviour across the whole dashboard; a per-currency
     split is a possible follow-up.
 
+- **Insights page — "תובנות" (2026-09-13):**
+  - New tab between השוואה and חשבונות: seven monthly-level readings that explain
+    the family's financial mechanism instead of listing numbers (chosen from a
+    GPT brainstorm of 12; see the tab's own notes for the rules):
+    1. **החודש המייצג** — median income/expenses/net (a single unusual month
+       doesn't move it), annualised gap, p25–p75 range, volatility level
+       (stable/moderate/volatile) and pattern (one-off outlier vs "a different
+       surprise every month").
+    2. **מבני או התנהגותי** — fixed obligations (auto-detected recurring
+       merchants + installment charges) vs variable spending vs income; verdict
+       balanced / structural (fixed ≥60% of income or leave nothing) /
+       behavioral (fixed leave room, variable exceeds it) / no-income. Also:
+       new recurring charges (3 consecutive months, never before), vanished
+       ones (absent in the last 2 months), price increases (≥10%).
+    3. **מה יוצר את הפער** — top categories by amount AND by over-budget, each
+       with charges/month, average ticket and a "many small / few large" tag.
+    4. **תקציב ריאלי או משאלת לב** — per budgeted category: months over,
+       median, p75; verdict wishful (over ≥⅔ of months, median ≥110% of limit →
+       suggest median), loose (median <70%, rarely over → suggest p75),
+       realistic; planningGap = Σ(median − limit) over wishful ones.
+    5. **האם יש שיפור** — recent half of the window vs the earlier half:
+       expenses, income, net, budget breaches/month, share left in 'אחר'
+       (bookkeeping accuracy), biggest movers up/down; verdict
+       improving/worsening/flat (±3% of income on net or ±5% expenses).
+    6. **הוצאות תקופתיות** — merchants seen in ≤2 months with a big charge
+       (≥ max(300, 1.5% of monthly spend)) → total, per-month set-aside
+       (rounded to 50), by category; "lumpy" categories (CV ≥ 0.6).
+    7. **תשלומים וחובות** — installment plans reconstructed from
+       (merchant, total, original price) with the latest installment number:
+       per-month burden and share of income, remaining debt, 12-month forward
+       schedule, plans ending within 6 months (money freed), plans opened in the
+       window, recently finished, stale (unseen 3+ months) and unparsed ones;
+       liabilities from the assets sheet.
+  - A "בארבע שורות" summary on top (normal month / what creates the gap / what
+    changed / what to check). Window selector: 3 / 6 / 12 / all COMPLETE months —
+    the current month is never included.
+  - Conventions match the Budgets monthly summary: included accounts minus
+    excluded sub-accounts, no transfers, no excluded categories, expenses =
+    negatives in non-income categories, income = positives in income categories,
+    months by transaction date.
+  - Recurring detection (`detectRecurring`): merchant key = description with
+    digits/punctuation stripped; 'monthly' = present in ≥ max(3, N−1) months,
+    ≤2 charges/month, MAD ≤ 0.5; 'periodic' = ≥3 and ≥N/2 months, evenly spaced
+    (gap spread ≤1), ≤1.5/month, MAD ≤ 0.2. Food / restaurants / shopping
+    merchants only qualify with MAD ≤ 0.1 (a real subscription, not a habit).
+  - Code: `server/db/insights.js` (pure functions, ~25ms on the real DB),
+    `server/routes/insights.js` (`GET /api/insights?months=6|all`),
+    `client/src/pages/InsightsPage.jsx`; `effectiveLimitsByMonth` exported from
+    `db/budgets.js`. Tests: `tests/test_insights.js` (25). Full suite: 161 passing.
+  - Balance history (prerequisite for a future cash-flow / net-worth timeline —
+    GPT's #9): new `account_balance_history` table (one row per account number
+    per day, written by `upsertBalance` on every sync; cards skipped),
+    `balanceHistory()` in `db/balances.js`. Starts accumulating silently on the
+    next sync; nothing shows it yet.
+  - Demo server for UI checks without real data: `node tests/demo-server.mjs`
+    boots the real app on a throwaway temp folder with fake data (2 accounts,
+    8 months, installments, a loan), port 3777, already unlocked with a dummy
+    password. Enabled by two new env overrides: `MYFINANCE_DATA_DIR` (database.js)
+    and `PORT` (index.js; allowed origins follow it). Also a "myfinance-demo"
+    entry in `.claude/launch.json`.
+  - Not done (by design): GPT's #9 cash-flow timing needs the balance history to
+    accumulate first; #10 "big easy wins" falls out of the recurring list; #11–12
+    are family decisions, not analysis.
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
+- Insights follow-ups: balance-over-time chart once `account_balance_history` has a few weeks of data; per-merchant "not fixed" override for the recurring list; net-worth trend when monthly asset snapshots accumulate
 - Validate the remaining wired sources (Mizrahi, OneZero) against real accounts
 - Let the user grow their own rule set from the real "אחר" transactions in Cal
 - Code-split the client bundle (recharts pushed it past 500 kB)

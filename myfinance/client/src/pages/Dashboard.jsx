@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight, Power, PiggyBank } from 'lucide-react'
+import { LogOut, Building2, List, Tag, Wallet, BarChart2, ArrowLeftRight, Power, PiggyBank, Lightbulb } from 'lucide-react'
 import AccountsPage from './AccountsPage.jsx'
 import AssetsPage from './AssetsPage.jsx'
 import TransactionsPage from './TransactionsPage.jsx'
@@ -7,6 +7,7 @@ import CategoriesPage from './CategoriesPage.jsx'
 import BudgetsPage from './BudgetsPage.jsx'
 import OverviewPage from './OverviewPage.jsx'
 import ComparePage from './ComparePage.jsx'
+import InsightsPage from './InsightsPage.jsx'
 import { CategoriesProvider } from '../CategoriesContext.jsx'
 import { DISCLAIMER_SHORT } from '../legal.js'
 import axios from 'axios'
@@ -14,6 +15,7 @@ import axios from 'axios'
 const TABS = [
   { id: 'overview',     label: 'סקירה',      icon: BarChart2 },
   { id: 'compare',      label: 'השוואה',     icon: ArrowLeftRight },
+  { id: 'insights',     label: 'תובנות',     icon: Lightbulb },
   { id: 'accounts',     label: 'חשבונות',    icon: Building2 },
   { id: 'transactions', label: 'תנועות',     icon: List },
   { id: 'categories',   label: 'קטגוריות',   icon: Tag },
@@ -104,6 +106,7 @@ export default function Dashboard({ onLock }) {
       <main className="p-6">
         {activeTab === 'overview'     && <OverviewPage />}
         {activeTab === 'compare'      && <ComparePage />}
+        {activeTab === 'insights'     && <InsightsPage />}
         {activeTab === 'accounts'     && <AccountsPage />}
         {activeTab === 'transactions' && <TransactionsPage />}
         {activeTab === 'categories'   && <CategoriesPage />}

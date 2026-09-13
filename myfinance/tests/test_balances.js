@@ -6,7 +6,7 @@
 import { DatabaseSync } from 'node:sqlite'
 import assert from 'node:assert'
 import { SCHEMA_SQL } from '../server/db/schema.js'
-import { upsertBalance, balancesByAccount, netBalance } from '../server/db/balances.js'
+import { upsertBalance, balancesByAccount, netBalance, balanceHistory } from '../server/db/balances.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -53,6 +53,22 @@ test('netBalance over selected accounts', () => {
   assert.strictEqual(netBalance(db, [1]), 1000)       // only account 1
   assert.strictEqual(netBalance(db, [1, 2]), 1200)    // both
   assert.strictEqual(netBalance(db), 1200)            // all (no ids)
+})
+
+test('every sync appends to the per-day balance history; same day overwrites; cards leave none', () => {
+  const db = freshDb()
+  upsertBalance(db, 1, 'A', 1000, '2026-06-01T08:00:00')
+  upsertBalance(db, 1, 'A', 1200, '2026-06-01T20:00:00')   // second sync the same day → replaces
+  upsertBalance(db, 1, 'A', 900,  '2026-06-15T08:00:00')
+  upsertBalance(db, 2, 'C', null, '2026-06-15T08:00:00')   // card → no history row
+  const hist = balanceHistory(db)
+  assert.deepStrictEqual(hist.map(h => [h.day, h.balance]), [['2026-06-01', 1200], ['2026-06-15', 900]])
+  assert.strictEqual(db.prepare(`SELECT COUNT(*) c FROM account_balance_history`).get().c, 2)
+  // The latest-balance table keeps its shape: still one row per account number.
+  assert.strictEqual(balancesByAccount(db).get(1).balance, 900)
+  // Account filter
+  assert.strictEqual(balanceHistory(db, [2]).length, 0)
+  assert.strictEqual(balanceHistory(db, [1]).length, 2)
 })
 
 console.log(`\n${passed} passed, ${failed} failed\n`)

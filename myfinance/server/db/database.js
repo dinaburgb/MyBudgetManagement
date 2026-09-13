@@ -10,7 +10,9 @@ import { fileURLToPath } from 'node:url'
 import { SCHEMA_SQL } from './schema.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DATA_DIR  = path.join(__dirname, '..', '..', 'data')
+// MYFINANCE_DATA_DIR lets tests/demo runs point at a throwaway folder instead of
+// the real data/ (mirrors MYFINANCE_CRYPTO_DIR in crypto/encryption.js).
+const DATA_DIR  = process.env.MYFINANCE_DATA_DIR || path.join(__dirname, '..', '..', 'data')
 const DB_PATH   = path.join(DATA_DIR, 'myfinance.db')
 const BACKUP_DIR = path.join(DATA_DIR, 'backups')
 
