@@ -60,13 +60,18 @@ MCP לא תמיד מקבלות את ה-PATH המלא של המשתמש.
 
 ### 1. Claude Desktop
 
-ערוך את הקובץ (אם אינו קיים — צור אותו):
+**מוגדר כבר על המחשב הזה** (2026-11-05). הקובץ:
 
 ```
-C:\Users\dinab\AppData\Roaming\Claude\claude_desktop_config.json
+C:\Users\dinab\AppData\Local\Claude-Data\claude_pzs8sxrjxfjjc\claude_desktop_config.json
 ```
 
-תוכן:
+שים לב לנתיב: ההתקנה כאן היא מ-Microsoft Store, ולכן ההגדרות **אינן** ב-
+`AppData\Roaming\Claude` (שם יש רק קובץ סימון `.user-data-left...`). הדרך
+הבטוחה למצוא את הקובץ הנכון בכל התקנה: Claude Desktop → Settings → Developer →
+Edit Config.
+
+התוכן שנוסף:
 
 ```json
 {
@@ -79,10 +84,18 @@ C:\Users\dinab\AppData\Roaming\Claude\claude_desktop_config.json
 }
 ```
 
-אם בקובץ כבר יש `mcpServers` — הוסף את `"mybudget"` בתוכו ואל תיצור מפתח שני.
+אם בקובץ כבר יש `mcpServers` — הוסף את `"mybudget"` בתוכו ואל תיצור מפתח שני
+(כאן, למשל, יושב לידו שרת `council`).
 
-סגור את Claude Desktop לגמרי (כולל האייקון במגש המשימות) ופתח מחדש. בתפריט הכלים
-בתוך השיחה צריכים להופיע הכלים של `mybudget`.
+**זהירות בעריכת הקובץ הזה:** באותו קובץ שמורות גם ההעדפות של האפליקציה
+(`preferences` — תיקיות מאושרות, מצבי הרשאות וכו'). אל תחליף את כל התוכן — הוסף
+רק את הבלוק. כדאי לגבות לפני (`claude_desktop_config.json.bak-<תאריך>`).
+מכיוון שהאפליקציה כותבת לקובץ הזה בעצמה, עדיף לערוך אותו כשהיא סגורה; אם ערכת
+בזמן שהיא פתוחה — אחרי ההפעלה מחדש בדוק שהבלוק עוד שם.
+
+סגור את Claude Desktop לגמרי (כולל האייקון במגש המשימות ליד השעון — סגירת החלון
+לא מספיקה) ופתח מחדש. בתפריט הכלים בתוך השיחה צריכים להופיע הכלים של
+`mybudget`.
 
 ### 2. Claude Code (בתיקיית הפרויקט)
 
