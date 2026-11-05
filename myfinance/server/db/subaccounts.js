@@ -7,6 +7,7 @@
  */
 
 import { getDb } from './database.js'
+import { upcomingChargeBySubAccount } from './card-charges.js'
 
 /**
  * SQL fragment: "this transaction's account number is NOT individually excluded".
@@ -21,7 +22,8 @@ export function notExcludedSql(idCol, numberCol) {
 
 /**
  * List the account numbers seen under one login (from transactions and balances),
- * each with whether it's included, how many transactions it has, and its balance.
+ * each with whether it's included, how many transactions it has, its balance and
+ * — for credit cards, which have no balance — its upcoming charge.
  */
 export function listSubAccounts(db, accountId) {
   const rows = db.prepare(`
@@ -54,12 +56,21 @@ export function listSubAccounts(db, accountId) {
     `SELECT account_number, label FROM subaccount_labels WHERE account_id = ?`
   ).all(accountId).map(r => [r.account_number, r.label]))
 
+  // Next charge per card number (cards only; empty for bank accounts).
+  const upcoming = upcomingChargeBySubAccount(db, accountId)
+
   return [...byNumber.values()]
-    .map(s => ({
-      ...s,
-      included: !excluded.has(s.account_number),
-      label: labels.get(s.account_number) || '',
-    }))
+    .map(s => {
+      const u = upcoming.get(s.account_number)
+      return {
+        ...s,
+        included: !excluded.has(s.account_number),
+        label: labels.get(s.account_number) || '',
+        upcoming_charge:      u ? u.amount : null,
+        upcoming_charge_date: u ? u.date   : null,
+        upcoming_charge_txns: u ? u.txns   : 0,
+      }
+    })
     .sort((a, b) => b.txn_count - a.txn_count)
 }
 

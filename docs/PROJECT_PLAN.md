@@ -385,6 +385,31 @@ Status of each bank / card integration:
     currencies. Pre-existing behaviour across the whole dashboard; a per-currency
     split is a possible follow-up.
 
+- **Credit cards: the upcoming charge (2026-11-05):**
+  - Cards report no balance, so the Accounts page showed nothing next to them.
+    Each card login now shows its next debit in amber — e.g. "לחיוב 09/11: ₪1,953"
+    — and the per-card breakdown shows the same per card number. Banks are
+    untouched and keep showing "יתרה".
+  - Definition (`server/db/card-charges.js`): card scrapers set `processed_date`
+    to the day a transaction will be charged, so the upcoming charge is the
+    earliest `processed_date` still today-or-later, and the net sum of every
+    transaction carrying that date — refunds and pending rows included. Next
+    month's installments sit on a later date and are deliberately left out.
+  - Only real card sources (cal / isracard / max) count. Manual entries copy the
+    expense date into `processed_date`, which is not a charge date, so they are
+    excluded; bank logins therefore never report a charge.
+  - Login level = the single debit the bank will see (one date, all cards on it).
+    Card level = each card's own nearest date, so cards on different cycles are
+    each reported correctly. Excluded cards still count in the login total,
+    because the bank is charged for them regardless.
+  - The number is "what is known so far" for that date and keeps growing until
+    the charge day — the tooltip on it says so.
+  - API: `GET /api/accounts` and `GET /api/accounts/:id/subaccounts` gained
+    `upcoming_charge` (positive = money leaving, negative = net refund),
+    `upcoming_charge_date` and `upcoming_charge_txns`; all null when nothing is
+    pending.
+  - Tests: `tests/test_card_charges.js` (12). Full suite passing (147 total).
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero) against real accounts

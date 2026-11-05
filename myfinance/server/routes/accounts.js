@@ -7,6 +7,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
 import { balancesByAccount } from '../db/balances.js'
+import { upcomingChargeByAccount } from '../db/card-charges.js'
 import { deleteAccount, moveAccount } from '../db/accounts.js'
 import { listSubAccounts, listAllSubAccounts, setSubAccountIncluded, setSubAccountLabel } from '../db/subaccounts.js'
 
@@ -31,12 +32,18 @@ router.get('/', (req, res) => {
            (SELECT COUNT(*) FROM excluded_subaccounts e WHERE e.account_id = accounts.id) AS excluded_count
     FROM accounts ORDER BY sort_order, source, owner
   `).all()
-  // Attach the latest known balance per account (null when unknown, e.g. cards).
+  // Attach the latest known balance per account (null when unknown, e.g. cards)
+  // and, for credit cards, the amount of the next charge ("לחיוב הקרוב").
   const balances = balancesByAccount(db)
+  const upcoming = upcomingChargeByAccount(db)
   for (const a of accounts) {
     const b = balances.get(a.id)
     a.balance = b ? b.balance : null
     a.balance_date = b ? b.balance_date : null
+    const u = upcoming.get(a.id)
+    a.upcoming_charge      = u ? u.amount : null
+    a.upcoming_charge_date = u ? u.date   : null
+    a.upcoming_charge_txns = u ? u.txns   : 0
   }
   res.json(accounts)
 })

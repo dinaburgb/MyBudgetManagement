@@ -38,6 +38,23 @@ const PRESET_OWNERS = ['Me', 'Partner', 'Joint']
 const CARD_SOURCES = new Set(['cal', 'isracard', 'max'])
 const isCard = source => CARD_SOURCES.has(source)
 
+// Upcoming card charge. Cards report no balance, so what matters for them is
+// how much the issuer is about to debit, and when. 'YYYY-MM-DD' -> 'DD/MM'.
+const fmtDay = ymd => {
+  const [, m, d] = String(ymd || '').split('-')
+  return d && m ? `${d}/${m}` : ''
+}
+const fmtFullDay = ymd => {
+  const [y, m, d] = String(ymd || '').split('-')
+  return d && m && y ? `${d}/${m}/${y}` : ''
+}
+// The server sends a positive amount when money leaves the account; a negative
+// one means refunds on that date outweigh the charges.
+const chargeLabel = amount => (amount < 0 ? 'לזכות' : 'לחיוב')
+const chargeTitle = (ymd, txns) =>
+  `סכום לחיוב הקרוב, בתאריך ${fmtFullDay(ymd)} — סכום ${txns} התנועות שנרשמו למועד זה (כולל תשלומים וזיכויים). ` +
+  `הסכום עשוי לגדול עד מועד החיוב ומתעדכן בכל סינכרון.`
+
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
   const [source, setSource] = useState(initial?.source || 'hapoalim')
@@ -490,6 +507,15 @@ export default function AccountsPage() {
                         יתרה: {ils(acc.balance)}
                       </span>
                     )}
+                    {/* Credit cards have no balance — show the next charge instead */}
+                    {acc.upcoming_charge != null && (
+                      <span
+                        className="font-mono text-sm text-amber-300"
+                        title={chargeTitle(acc.upcoming_charge_date, acc.upcoming_charge_txns)}
+                      >
+                        {chargeLabel(acc.upcoming_charge)} {fmtDay(acc.upcoming_charge_date)}: {ils(Math.abs(acc.upcoming_charge))}
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-400 mt-0.5">
                     {SOURCE_LABELS[acc.source]} · {acc.owner}
@@ -605,6 +631,14 @@ export default function AccountsPage() {
                                 {s.balance != null && (
                                   <span className={`font-mono text-sm ${s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
                                     {ils(s.balance)}
+                                  </span>
+                                )}
+                                {s.upcoming_charge != null && (
+                                  <span
+                                    className="font-mono text-sm text-amber-300 whitespace-nowrap"
+                                    title={chargeTitle(s.upcoming_charge_date, s.upcoming_charge_txns)}
+                                  >
+                                    {chargeLabel(s.upcoming_charge)} {fmtDay(s.upcoming_charge_date)}: {ils(Math.abs(s.upcoming_charge))}
                                   </span>
                                 )}
                               </div>
