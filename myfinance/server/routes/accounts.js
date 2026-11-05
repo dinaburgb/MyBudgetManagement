@@ -7,7 +7,7 @@ import { Router } from 'express'
 import { getDb } from '../db/database.js'
 import { encrypt, isUnlocked } from '../crypto/encryption.js'
 import { balancesByAccount } from '../db/balances.js'
-import { upcomingChargeByAccount } from '../db/card-charges.js'
+import { upcomingChargeByAccount, upcomingChargeTotal } from '../db/card-charges.js'
 import { deleteAccount, moveAccount } from '../db/accounts.js'
 import { listSubAccounts, listAllSubAccounts, setSubAccountIncluded, setSubAccountLabel } from '../db/subaccounts.js'
 
@@ -46,6 +46,16 @@ router.get('/', (req, res) => {
     a.upcoming_charge_txns = u ? u.txns   : 0
   }
   res.json(accounts)
+})
+
+/**
+ * GET /api/accounts/upcoming-charge — what every credit card together is about
+ * to take out of the bank accounts: each card's own next charge, summed over
+ * the cards that count toward totals. Declared before '/:id/...' so the literal
+ * path isn't swallowed by a param route.
+ */
+router.get('/upcoming-charge', (req, res) => {
+  res.json(upcomingChargeTotal(getDb()))
 })
 
 /** GET /api/accounts/subaccounts — every sub-account number across all logins

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, Building2, RefreshCw, ChevronDown, ChevronLeft, ArrowUp, ArrowDown, Eye, EyeOff, CreditCard } from 'lucide-react'
 import axios from 'axios'
 import { ils } from '../colors.js'
 
@@ -51,6 +51,9 @@ const fmtFullDay = ymd => {
 // The server sends a positive amount when money leaves the account; a negative
 // one means refunds on that date outweigh the charges.
 const chargeLabel = amount => (amount < 0 ? 'לזכות' : 'לחיוב')
+// One date, or a range, for the cards' combined charge: "09/11" / "09/11–14/11".
+const rangeLabel = (from, to) =>
+  (from === to ? fmtDay(from) : `${fmtDay(from)}–${fmtDay(to)}`)
 const chargeTitle = (ymd, txns) =>
   `סכום לחיוב הקרוב, בתאריך ${fmtFullDay(ymd)} — סכום ${txns} התנועות שנרשמו למועד זה (כולל תשלומים וזיכויים). ` +
   `הסכום עשוי לגדול עד מועד החיוב ומתעדכן בכל סינכרון.`
@@ -222,11 +225,17 @@ export default function AccountsPage() {
   const [loading,  setLoading]  = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing,  setEditing]  = useState(null)
+  // Sum of every included card's next charge (null until loaded / on failure).
+  const [chargeTotal, setChargeTotal] = useState(null)
 
   async function load() {
     try {
-      const res = await axios.get('/api/accounts')
+      const [res, total] = await Promise.all([
+        axios.get('/api/accounts'),
+        axios.get('/api/accounts/upcoming-charge').catch(() => null),
+      ])
       setAccounts(res.data)
+      setChargeTotal(total ? total.data : null)
     } catch {
       // will show empty state
     } finally {
@@ -441,6 +450,32 @@ export default function AccountsPage() {
         </div>
       ) : (
        <>
+        {/* Total of the cards' upcoming charges — only the cards that count
+            toward totals, so it matches what the rest of the app sums. */}
+        {chargeTotal && chargeTotal.cards > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 bg-gray-900 rounded-xl px-4 py-3 border border-amber-400/20"
+            title={`סכום החיוב הקרוב של כל כרטיס, עבור הכרטיסים שנכללים בחישובים בלבד. ` +
+                   `הסכום מתעדכן בכל סינכרון ועשוי לגדול עד מועד החיוב.`}
+          >
+            <span className="flex items-center gap-2 text-sm text-gray-300">
+              <CreditCard className="w-4 h-4 text-amber-300" />
+              {chargeTotal.amount < 0 ? 'סך הזיכוי הקרוב בכרטיסים' : 'סך החיוב הקרוב בכרטיסים'}
+            </span>
+            <span className="font-mono text-lg font-semibold text-amber-300">
+              {ils(Math.abs(chargeTotal.amount))}
+            </span>
+            <span className="text-xs text-gray-500">
+              {chargeTotal.cards} כרטיסים · {rangeLabel(chargeTotal.from, chargeTotal.to)} · {chargeTotal.txns} תנועות
+            </span>
+            {chargeTotal.skipped.cards > 0 && (
+              <span className="text-xs text-amber-500/80">
+                לא נכללו {chargeTotal.skipped.cards} כרטיסים ({ils(Math.abs(chargeTotal.skipped.amount))}) שהוצאו מהחישובים
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Bulk toolbar: select all + update selected */}
         <div className="flex flex-wrap items-center gap-3 mb-3 bg-gray-900 rounded-xl px-4 py-3">
           <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">

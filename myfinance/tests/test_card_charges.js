@@ -13,7 +13,8 @@ import { SCHEMA_SQL } from '../server/db/schema.js'
 import { saveAccountTransactions, insertManualTransaction } from '../server/db/save-transactions.js'
 import { seedCategories } from '../server/db/categories.js'
 import { listSubAccounts } from '../server/db/subaccounts.js'
-import { upcomingChargeByAccount, upcomingChargeBySubAccount, todayYmd } from '../server/db/card-charges.js'
+import { upcomingChargeByAccount, upcomingChargeBySubAccount, upcomingChargeByCard,
+         upcomingChargeTotal, todayYmd } from '../server/db/card-charges.js'
 
 let passed = 0, failed = 0
 function test(name, fn) {
@@ -180,6 +181,98 @@ test('todayYmd returns a local YYYY-MM-DD', () => {
   assert.strictEqual(todayYmd(new Date(2026, 10, 5)), '2026-11-05')
   assert.strictEqual(todayYmd(new Date(2026, 0, 9)),  '2026-01-09')
   assert.match(todayYmd(), /^\d{4}-\d{2}-\d{2}$/)
+})
+
+test('the total adds up every included card across all logins', () => {
+  const db = freshDb()
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [txn(-2589, '2026-11-14')] }, db)
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-7780, '2026-11-09')] }, db)
+  saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-225,  '2026-11-09')] }, db)
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 10594)
+  assert.strictEqual(t.cards, 3)
+  assert.strictEqual(t.txns, 3)
+  assert.strictEqual(t.from, '2026-11-09')   // earliest charge date counted
+  assert.strictEqual(t.to,   '2026-11-14')   // latest
+  assert.strictEqual(t.skipped.cards, 0)
+})
+
+test('a login left out of totals is not added in, and is reported as skipped', () => {
+  const db = freshDb()
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [txn(-2589, '2026-11-14')] }, db)
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-7780, '2026-11-09')] }, db)
+  db.prepare(`UPDATE accounts SET include_in_totals = 0 WHERE id = 3`).run()   // the Max login
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 2589)
+  assert.strictEqual(t.cards, 1)
+  assert.strictEqual(t.from, '2026-11-14')
+  assert.strictEqual(t.skipped.cards, 1)
+  assert.strictEqual(t.skipped.amount, 7780)
+})
+
+test('an individually unticked card is not added in, and is reported as skipped', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-7780, '2026-11-09')] }, db)
+  saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-225,  '2026-11-09')] }, db)
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (3, '0795')`).run()
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 7780)
+  assert.strictEqual(t.cards, 1)
+  assert.strictEqual(t.skipped.cards, 1)
+  assert.strictEqual(t.skipped.amount, 225)
+  // The login line still shows the full debit the bank will see.
+  assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(3).amount, 8005)
+})
+
+test('each card contributes its own next date, not the earliest one overall', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [
+    txn(-300, '2026-11-25'),
+    txn(-900, '2026-12-25'),   // the charge after that — not part of this total
+  ] }, db)
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 800)
+  assert.strictEqual(t.to, '2026-11-25')
+})
+
+test('nothing coming up: a zero total with no dates', () => {
+  const db = freshDb()
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [txn(-1000, '2026-10-14')] }, db)
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 0)
+  assert.strictEqual(t.cards, 0)
+  assert.strictEqual(t.from, null)
+  assert.strictEqual(t.to, null)
+})
+
+test('a net refund makes the total negative (money coming back)', () => {
+  const db = freshDb()
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [
+    txn(-200, '2026-11-14'),
+    txn(900,  '2026-11-14', { description: 'refund' }),
+  ] }, db)
+  assert.strictEqual(upcomingChargeTotal(db, TODAY).amount, -700)
+})
+
+test('bank accounts and manual entries never reach the total', () => {
+  const db = freshDb()
+  saveAccountTransactions(bank, { accountNumber: '111', txns: [txn(-900, '2026-11-20')] }, db)
+  insertManualTransaction(db, { date: '2026-11-20', description: 'cash', amount: -50, category: 'מזון', account_id: 2 })
+  const t = upcomingChargeTotal(db, TODAY)
+  assert.strictEqual(t.amount, 0)
+  assert.strictEqual(t.cards, 0)
+})
+
+test('upcomingChargeByCard lists one row per card with its inclusion flag', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
+  saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-300, '2026-11-09')] }, db)
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (3, '0795')`).run()
+  const rows = upcomingChargeByCard(db, TODAY)
+  assert.strictEqual(rows.length, 2)
+  assert.strictEqual(rows.find(r => r.account_number === '8927').included, true)
+  assert.strictEqual(rows.find(r => r.account_number === '0795').included, false)
 })
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`)

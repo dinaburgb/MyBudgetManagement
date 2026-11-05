@@ -89,3 +89,74 @@ export function upcomingChargeBySubAccount(db, accountId, today = todayYmd()) {
   `).all(...CARD_SOURCES, accountId, today, ...CARD_SOURCES, accountId)
   return new Map(rows.map(r => [r.account_number, shape(r)]))
 }
+
+/**
+ * Every card's next charge in one query, with whether that card counts toward
+ * the app's totals. Returns [{ account_id, account_number, date, amount, included }].
+ *
+ * "Counts toward totals" is the same rule the rest of the app uses: the login
+ * is marked `include_in_totals` AND the card number is not individually
+ * excluded. The NOT EXISTS is written out here rather than imported from
+ * subaccounts.js, which already imports this module.
+ */
+export function upcomingChargeByCard(db = getDb(), today = todayYmd()) {
+  return db.prepare(`
+    WITH next AS (
+      SELECT account_id, account_number, MIN(processed_date) AS charge_date
+      FROM transactions
+      WHERE source IN (${SRC}) AND account_id IS NOT NULL
+        AND account_number IS NOT NULL AND processed_date >= ?
+      GROUP BY account_id, account_number
+    )
+    SELECT n.account_id,
+           n.account_number,
+           n.charge_date                      AS charge_date,
+           SUM(t.amount)                      AS total,
+           COUNT(*)                           AS txns,
+           CASE WHEN a.include_in_totals = 1
+                 AND NOT EXISTS (SELECT 1 FROM excluded_subaccounts x
+                                  WHERE x.account_id = n.account_id
+                                    AND x.account_number = n.account_number)
+                THEN 1 ELSE 0 END             AS included
+    FROM next n
+    JOIN accounts a ON a.id = n.account_id
+    JOIN transactions t ON t.account_id = n.account_id
+                       AND t.account_number = n.account_number
+                       AND t.processed_date = n.charge_date
+                       AND t.source IN (${SRC})
+    GROUP BY n.account_id, n.account_number
+    ORDER BY n.charge_date, n.account_id, n.account_number
+  `).all(...CARD_SOURCES, today, ...CARD_SOURCES).map(r => ({
+    account_id: r.account_id,
+    account_number: r.account_number,
+    ...shape(r),
+    included: !!r.included,
+  }))
+}
+
+/**
+ * What all the cards together are about to take out of the bank accounts:
+ * each card's own next charge, added up over the cards that count toward
+ * totals. Cards whose login is excluded, or that were unticked individually,
+ * are reported separately in `skipped` instead of being silently dropped.
+ *
+ * Returns { amount, from, to, cards, txns, skipped: { cards, amount } };
+ * `amount` is 0 and the dates null when no card has anything coming up.
+ */
+export function upcomingChargeTotal(db = getDb(), today = todayYmd()) {
+  const rows = upcomingChargeByCard(db, today)
+  const counted = rows.filter(r => r.included)
+  const skipped = rows.filter(r => !r.included)
+  const dates = counted.map(r => r.date).sort()
+  return {
+    amount: counted.reduce((sum, r) => sum + r.amount, 0),
+    from: dates[0] || null,
+    to: dates[dates.length - 1] || null,
+    cards: counted.length,
+    txns: counted.reduce((sum, r) => sum + r.txns, 0),
+    skipped: {
+      cards: skipped.length,
+      amount: skipped.reduce((sum, r) => sum + r.amount, 0),
+    },
+  }
+}

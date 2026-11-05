@@ -410,6 +410,25 @@ Status of each bank / card integration:
     pending.
   - Tests: `tests/test_card_charges.js` (12). Full suite passing (147 total).
 
+- **Credit cards: total of the upcoming charges (2026-11-05):**
+  - A strip at the top of the Accounts page now sums what all the cards are
+    about to take out: "סך החיוב הקרוב בכרטיסים ₪12,546", with the card count,
+    the date (or date range) and the number of transactions behind it.
+  - Each card contributes **its own** next charge, so cards on different billing
+    cycles are all represented; the date range makes that visible.
+  - Counted only for cards that count toward totals — the login is ticked
+    "כלול בחישובים" AND the card number is not individually excluded, the
+    same rule the rest of the app uses. Cards left out are reported in the strip
+    ("לא נכללו N כרטיסים") rather than silently dropped, so the number is
+    never quietly smaller than it looks.
+  - Deliberate asymmetry: a *login* line still shows the full debit including
+    excluded cards (that is what the bank will actually take), while the total
+    respects the user's inclusion choices. Both are documented in the tooltips.
+  - API: `GET /api/accounts/upcoming-charge` →
+    `{ amount, from, to, cards, txns, skipped: { cards, amount } }`.
+    `upcomingChargeByCard` exposes the per-card rows with an `included` flag.
+  - Tests: `tests/test_card_charges.js` grew to 20. Full suite passing (155 total).
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Validate the remaining wired sources (Mizrahi, OneZero) against real accounts
