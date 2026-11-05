@@ -29,6 +29,7 @@ import budgetsRouter from './routes/budgets.js'
 import statsRouter from './routes/stats.js'
 import transfersRouter from './routes/transfers.js'
 import assetsRouter from './routes/assets.js'
+import insightsRouter from './routes/insights.js'
 import { seedDefaultRules, migrateCategoriesToHebrew, ensureEssentialRules } from './db/categorize.js'
 import { seedCategories, migrateFuelToVehicle } from './db/categories.js'
 
@@ -58,9 +59,12 @@ const server = createServer(app)
 // Allowed browser origins. The React app is served from this same origin (and in
 // dev Vite proxies /api to here), so legit requests are same-origin. We allow
 // ONLY localhost so a random site you have open can't reach localhost:3000.
+// PORT is overridable (PORT=3777) so a demo/test instance can run beside the
+// real one; the allowed origins follow it.
+const PORT = Number(process.env.PORT) || 3000
 const ALLOWED_ORIGINS = new Set([
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
   'http://localhost:5173',  // Vite dev server
   'http://127.0.0.1:5173',
 ])
@@ -223,6 +227,7 @@ app.use('/api/budgets',      budgetsRouter)
 app.use('/api/stats',        statsRouter)
 app.use('/api/transfers',    transfersRouter)
 app.use('/api/assets',       assetsRouter)
+app.use('/api/insights',     insightsRouter)
 
 // --- Fallback: serve React for all non-API routes ---
 app.get('*', (req, res) => {
@@ -275,7 +280,6 @@ export function broadcastOtpRequest(accountName) {
 }
 
 // --- Start ---
-const PORT = 3000
 // Bind to loopback only (127.0.0.1) so the app is reachable ONLY from this
 // machine, never from other devices on the local network/Wi-Fi.
 const HOST = '127.0.0.1'

@@ -232,6 +232,30 @@ export function budgetEnvelope(db, throughMonth) {
   return result
 }
 
+/**
+ * Effective budget limit per category for each of the given months, honouring
+ * month overrides and each recurring default's effective_from. Only (category,
+ * month) pairs that actually have a limit are present.
+ *
+ * @returns {Map<string, number>} 'cat|YYYY-MM' -> limit
+ */
+export function effectiveLimitsByMonth(db, months) {
+  const defaultRows  = db.prepare(`SELECT category, amount, effective_from FROM budgets WHERE month = ''`).all()
+  const overrideRows = db.prepare(`SELECT category, month, amount FROM budgets WHERE month != ''`).all()
+  const defaults    = new Map(defaultRows.map(r => [r.category, r.amount]))
+  const defaultFrom = new Map(defaultRows.map(r => [r.category, r.effective_from || '']))
+  const overrideByKey = new Map(overrideRows.map(r => [`${r.category}|${r.month}`, r.amount]))
+  const cats = new Set([...defaults.keys(), ...overrideRows.map(r => r.category)])
+  const out = new Map()
+  for (const cat of cats) {
+    for (const m of months) {
+      const lim = effectiveLimit(cat, m, defaults, defaultFrom, overrideByKey)
+      if (lim != null) out.set(`${cat}|${m}`, lim)
+    }
+  }
+  return out
+}
+
 /** Spent per category per month for a set of months, from included accounts only.
  *  @returns {Map<string, number>} 'cat|YYYY-MM' -> spent */
 function spentByCategoryMonth(db, months) {

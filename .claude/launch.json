@@ -4,9 +4,20 @@
     {
       "name": "myfinance",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["server/index.js"],
+      "runtimeArgs": [
+        "server/index.js"
+      ],
       "cwd": "myfinance",
       "port": 3000
+    },
+    {
+      "name": "myfinance-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tests/demo-server.mjs"
+      ],
+      "cwd": "myfinance",
+      "port": 3777
     }
   ]
 }

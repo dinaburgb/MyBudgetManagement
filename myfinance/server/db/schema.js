@@ -97,6 +97,20 @@ CREATE TABLE IF NOT EXISTS account_balances (
   PRIMARY KEY (account_id, account_number)
 );
 
+-- Balance history: one row per account number per day, written on every scrape
+-- alongside account_balances (which keeps only the latest). Cards report no
+-- balance and are skipped. This is what a future cash-flow / net-worth timeline
+-- is built from, so it starts accumulating silently from the first sync.
+CREATE TABLE IF NOT EXISTS account_balance_history (
+  account_id     INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  day            TEXT NOT NULL,             -- YYYY-MM-DD of the scrape (local)
+  balance        REAL NOT NULL,
+  balance_date   TEXT,                      -- full scrape timestamp (ISO)
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, account_number, day)
+);
+
 -- Monthly budget limits per category.
 -- month = '' means a recurring default that applies to every month; a specific
 -- 'YYYY-MM' row overrides the default for that one month.
