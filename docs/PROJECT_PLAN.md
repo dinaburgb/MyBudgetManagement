@@ -578,6 +578,24 @@ Status of each bank / card integration:
     data to the internet.
   - Tests: `tests/test_mcp_tools.js` 15. Full suite passing (204 total).
 
+- **MCP: one-click setup for Claude Desktop (2026-11-05):**
+  `scripts/add-mcp-to-claude-desktop.ps1` (+ a double-clickable `.bat`) adds the
+  server to Claude Desktop's config: finds node and the config file itself,
+  backs it up, adds only the `mybudget` block, verifies the write, and is a
+  no-op on a second run.
+  - **Why a script and not a documented hand-edit:** Claude Desktop keeps
+    `mcpServers` in the *same* file as its own `preferences`, and rewrites that
+    file from memory while running — an edit made with the app open is silently
+    lost when it quits. That happened here on the first attempt, which is why
+    the script refuses to run (unless `-Force`) while `Claude.exe` is alive.
+  - The config is **not** under `AppData\Roaming\Claude` on this machine: the
+    Microsoft Store build redirects user data, so it lives in
+    `AppData\Local\Claude-Data\<package>\`. The script checks the redirected
+    folders too and picks the most recently written one.
+  - Verified that the PowerShell JSON round-trip is lossless on the real 9 kB
+    config: exactly one difference (the added key), `preferences` byte-identical,
+    the existing `council` server untouched.
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Insights follow-ups: balance-over-time chart once `account_balance_history` has a few weeks of data; per-merchant "not fixed" override for the recurring list; net-worth trend when monthly asset snapshots accumulate
