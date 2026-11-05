@@ -40,9 +40,12 @@ router.get('/', (req, res) => {
     const b = balances.get(a.id)
     a.balance = b ? b.balance : null
     a.balance_date = b ? b.balance_date : null
+    // Cards: the next charge, summed over the cards kept in the totals. from/to
+    // are the same date unless this login's cards sit on different cycles.
     const u = upcoming.get(a.id)
     a.upcoming_charge      = u ? u.amount : null
-    a.upcoming_charge_date = u ? u.date   : null
+    a.upcoming_charge_date = u ? u.from   : null
+    a.upcoming_charge_to   = u ? u.to     : null
     a.upcoming_charge_txns = u ? u.txns   : 0
   }
   res.json(accounts)

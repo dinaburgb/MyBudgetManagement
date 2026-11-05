@@ -60,7 +60,8 @@ test('the charge is the nearest future date only — later installments are not 
     txn(-83,   '2026-12-14'),   // next month's installment — not part of this charge
   ] }, db)
   const u = upcomingChargeByAccount(db, TODAY).get(2)
-  assert.strictEqual(u.date, '2026-11-14')
+  assert.strictEqual(u.from, '2026-11-14')
+  assert.strictEqual(u.to,   '2026-11-14')   // one card → one date, not a range
   assert.strictEqual(u.amount, 1500)   // positive = money leaving the account
   assert.strictEqual(u.txns, 2)
 })
@@ -85,7 +86,7 @@ test('a charge dated today still counts', () => {
   const db = freshDb()
   saveAccountTransactions(cal, { accountNumber: '7364', txns: [txn(-250, TODAY)] }, db)
   const u = upcomingChargeByAccount(db, TODAY).get(2)
-  assert.strictEqual(u.date, TODAY)
+  assert.strictEqual(u.from, TODAY)
   assert.strictEqual(u.amount, 250)
 })
 
@@ -121,15 +122,15 @@ test('pending transactions count toward the charge', () => {
   assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(2).amount, 160)
 })
 
-test('one login, two cards: the login shows the nearest debit, each card its own', () => {
+test('one login, two cards: the login adds them up, each card keeps its own', () => {
   const db = freshDb()
   saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-7000, '2026-11-09')] }, db)
   saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-200,  '2026-11-09')] }, db)
   saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-83,   '2026-12-09')] }, db)
 
-  // Login level: the next debit on 09/11 covers both cards.
+  // Login level: the debit on 09/11 covers both cards.
   const login = upcomingChargeByAccount(db, TODAY).get(3)
-  assert.strictEqual(login.date, '2026-11-09')
+  assert.strictEqual(login.from, '2026-11-09')
   assert.strictEqual(login.amount, 7200)
   assert.strictEqual(login.txns, 2)
 
@@ -140,25 +141,59 @@ test('one login, two cards: the login shows the nearest debit, each card its own
   assert.strictEqual(perCard.get('0795').date, '2026-11-09')
 })
 
-test('cards on different cycles under one login each keep their own date', () => {
+test('cards on different cycles: the login sums both and reports the date range', () => {
   const db = freshDb()
   saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
   saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-300, '2026-11-25')] }, db)
   const perCard = upcomingChargeBySubAccount(db, 3, TODAY)
   assert.strictEqual(perCard.get('8927').date, '2026-11-09')
   assert.strictEqual(perCard.get('0795').date, '2026-11-25')
-  // The login's next debit is the earlier one, and only that one.
+  // The login figure is the sum of its cards, so the page adds up; the two
+  // different dates become a range the UI can show.
   const login = upcomingChargeByAccount(db, TODAY).get(3)
-  assert.strictEqual(login.date, '2026-11-09')
-  assert.strictEqual(login.amount, 500)
+  assert.strictEqual(login.amount, 800)
+  assert.strictEqual(login.from, '2026-11-09')
+  assert.strictEqual(login.to,   '2026-11-25')
+  assert.strictEqual(login.cards, 2)
 })
 
-test('excluded cards still count in the login debit (the bank is charged anyway)', () => {
+test('the page adds up: the total equals the sum of the login figures', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
+  saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-300, '2026-11-25')] }, db)
+  saveAccountTransactions(cal, { accountNumber: '7364', txns: [txn(-900, '2026-11-14')] }, db)
+  const logins = [...upcomingChargeByAccount(db, TODAY).values()]
+  const sum = logins.reduce((t, l) => t + l.amount, 0)
+  assert.strictEqual(sum, upcomingChargeTotal(db, TODAY).amount)
+  assert.strictEqual(sum, 1700)
+})
+
+test('an unticked card is left out of its login figure, but still shows on its own row', () => {
   const db = freshDb()
   saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
   saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-300, '2026-11-09')] }, db)
   db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (3, '0795')`).run()
-  assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(3).amount, 800)
+  assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(3).amount, 500)
+  // The card's own row keeps reporting its charge — that is how the user sees
+  // what unticking it leaves out.
+  assert.strictEqual(upcomingChargeBySubAccount(db, 3, TODAY).get('0795').amount, 300)
+})
+
+test('a login whose cards are all unticked reports no charge at all', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (3, '8927')`).run()
+  assert.strictEqual(upcomingChargeByAccount(db, TODAY).has(3), false)
+})
+
+test('unticking the card with the nearest date moves the login to the next one', () => {
+  const db = freshDb()
+  saveAccountTransactions(max, { accountNumber: '8927', txns: [txn(-500, '2026-11-09')] }, db)
+  saveAccountTransactions(max, { accountNumber: '0795', txns: [txn(-300, '2026-11-25')] }, db)
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (3, '8927')`).run()
+  const login = upcomingChargeByAccount(db, TODAY).get(3)
+  assert.strictEqual(login.from, '2026-11-25')   // not the excluded card's 09/11
+  assert.strictEqual(login.amount, 300)
 })
 
 test('listSubAccounts carries the charge for cards and nulls for bank numbers', () => {
@@ -220,8 +255,9 @@ test('an individually unticked card is not added in, and is reported as skipped'
   assert.strictEqual(t.cards, 1)
   assert.strictEqual(t.skipped.cards, 1)
   assert.strictEqual(t.skipped.amount, 225)
-  // The login line still shows the full debit the bank will see.
-  assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(3).amount, 8005)
+  // The login line shows the same included-only figure, so the strip's total
+  // is exactly the sum of what is written next to the logins.
+  assert.strictEqual(upcomingChargeByAccount(db, TODAY).get(3).amount, 7780)
 })
 
 test('each card contributes its own next date, not the earliest one overall', () => {

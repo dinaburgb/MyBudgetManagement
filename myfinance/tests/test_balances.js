@@ -46,6 +46,24 @@ test('balancesByAccount sums account numbers and ignores nulls', () => {
   assert.strictEqual(map.get(2).balance, null)  // only-null account reports null, not 0
 })
 
+test('balancesByAccount counts only the account numbers kept in the totals', () => {
+  const db = freshDb()
+  upsertBalance(db, 1, 'A', 1000, '2026-06-10T00:00:00Z')
+  upsertBalance(db, 1, 'B', 500,  '2026-06-11T00:00:00Z')
+  upsertBalance(db, 1, 'C', 300,  '2026-06-12T00:00:00Z')
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (1,'B'), (1,'C')`).run()
+  const map = balancesByAccount(db)
+  assert.strictEqual(map.get(1).balance, 1000)                         // only 'A' counts
+  assert.strictEqual(map.get(1).balance_date, '2026-06-10T00:00:00Z')  // and only its date
+})
+
+test('a login whose account numbers are all excluded reports no balance', () => {
+  const db = freshDb()
+  upsertBalance(db, 1, 'A', 1000, '2026-06-10T00:00:00Z')
+  db.prepare(`INSERT INTO excluded_subaccounts (account_id, account_number) VALUES (1,'A')`).run()
+  assert.strictEqual(balancesByAccount(db).has(1), false)
+})
+
 test('netBalance over selected accounts', () => {
   const db = freshDb()
   upsertBalance(db, 1, 'A', 1000, 'd')

@@ -484,6 +484,7 @@ Status of each bank / card integration:
     Card level = each card's own nearest date, so cards on different cycles are
     each reported correctly. Excluded cards still count in the login total,
     because the bank is charged for them regardless.
+    *(Superseded on 2026-11-05 — see "Every figure counts only what is included".)*
   - The number is "what is known so far" for that date and keeps growing until
     the charge day — the tooltip on it says so.
   - API: `GET /api/accounts` and `GET /api/accounts/:id/subaccounts` gained
@@ -506,10 +507,42 @@ Status of each bank / card integration:
   - Deliberate asymmetry: a *login* line still shows the full debit including
     excluded cards (that is what the bank will actually take), while the total
     respects the user's inclusion choices. Both are documented in the tooltips.
+    *(Superseded on 2026-11-05 — the user asked for one consistent meaning; see
+    "Every figure counts only what is included".)*
   - API: `GET /api/accounts/upcoming-charge` →
     `{ amount, from, to, cards, txns, skipped: { cards, amount } }`.
     `upcomingChargeByCard` exposes the per-card rows with an `included` flag.
   - Tests: `tests/test_card_charges.js` grew to 20. Full suite passing (155 total).
+
+- **Every figure counts only what is included (2026-11-05):**
+  - The user's rule, and now the page's: a figure next to a login means "the
+    money that counts". If a Discount login has three account numbers and two
+    are unticked, the balance shown is the one that counts — ₪24,644, not the
+    ₪33,183 of all three. Same for cards: an unticked card no longer shows up in
+    its login's charge. This reverses the "the bank is charged anyway" choice
+    documented in the two entries above.
+  - A login the user took out of the totals entirely keeps its figure but greyed
+    out, with a tooltip saying it is informational — the information stays
+    visible without pretending to count. Card/account rows inside the breakdown
+    are greyed the same way when unticked, so you can still see exactly what you
+    are leaving out.
+  - The page now adds up at every level: the strip total = the sum of the login
+    figures = the sum of the card rows under them. To get there, a login's card
+    figure became the sum of **each of its cards'** next charge (it was the
+    nearest charge date only, which silently dropped a card billed later in the
+    month — ₪52 missing on real data). When a login's cards sit on different
+    dates the label is a range: "לחיוב 09/11–19/11".
+  - `balancesByAccount` sums only non-excluded account numbers (a login whose
+    numbers are all excluded is absent from the map → no figure).
+    `upcomingChargeByCard` now reports two flags: `kept` (not unticked — what a
+    login sums) and `included` (kept AND the login counts — what the total sums),
+    and both `upcomingChargeByAccount` and `upcomingChargeTotal` are built from
+    it, so the three levels cannot drift apart.
+  - API: `upcoming_charge_date` is now the earliest date and `upcoming_charge_to`
+    the latest.
+  - Tests: `tests/test_card_charges.js` 23, `tests/test_balances.js` 6 — including
+    one that asserts the total equals the sum of the login figures. Full suite
+    passing (189 total).
 
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)

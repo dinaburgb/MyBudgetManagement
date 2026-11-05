@@ -57,6 +57,17 @@ const rangeLabel = (from, to) =>
 const chargeTitle = (ymd, txns) =>
   `סכום לחיוב הקרוב, בתאריך ${fmtFullDay(ymd)} — סכום ${txns} התנועות שנרשמו למועד זה (כולל תשלומים וזיכויים). ` +
   `הסכום עשוי לגדול עד מועד החיוב ומתעדכן בכל סינכרון.`
+// A login's figure adds up the next charge of each of its cards, which may fall
+// on different dates — then it is a range, not one date.
+const loginChargeTitle = (from, to, txns) =>
+  (from === to
+    ? `סכום לחיוב הקרוב, בתאריך ${fmtFullDay(from)}`
+    : `סכום החיובים הקרובים של כל הכרטיסים בהתחברות, בין ${fmtFullDay(from)} ל-${fmtFullDay(to)}`) +
+  ` — סכום ${txns} התנועות שנרשמו למועדים אלה (כולל תשלומים וזיכויים). ` +
+  `נספרים רק כרטיסים שמסומנים כנכללים בחישובים. הסכום עשוי לגדול עד מועד החיוב ומתעדכן בכל סינכרון.`
+// Shown on a figure that belongs to a login the user took out of the totals:
+// the number is still there, but greyed out and marked as informational.
+const OUT_OF_TOTALS_TITLE = 'ההתחברות כולה לא נכללת בחישובים — הסכום מוצג לידיעה בלבד ואינו נספר בשום סיכום.'
 
 function AccountForm({ initial, onSave, onCancel }) {
   const [name,   setName]   = useState(initial?.name   || '')
@@ -537,18 +548,28 @@ export default function AccountsPage() {
                   <div>
                   <div className="flex items-center gap-3">
                     <span className="font-medium text-white">{acc.name}</span>
+                    {/* Both figures count only what the user kept in the totals:
+                        unticked account numbers / cards are already left out by
+                        the server. A login taken out of the totals entirely keeps
+                        its figure, greyed out, so it reads as informational. */}
                     {acc.balance != null && (
-                      <span className={`font-mono text-sm ${acc.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      <span
+                        className={`font-mono text-sm ${!acc.include_in_totals ? 'text-gray-500'
+                          : acc.balance < 0 ? 'text-red-400' : 'text-green-400'}`}
+                        title={acc.include_in_totals ? undefined : OUT_OF_TOTALS_TITLE}
+                      >
                         יתרה: {ils(acc.balance)}
                       </span>
                     )}
                     {/* Credit cards have no balance — show the next charge instead */}
                     {acc.upcoming_charge != null && (
                       <span
-                        className="font-mono text-sm text-amber-300"
-                        title={chargeTitle(acc.upcoming_charge_date, acc.upcoming_charge_txns)}
+                        className={`font-mono text-sm ${acc.include_in_totals ? 'text-amber-300' : 'text-gray-500'}`}
+                        title={acc.include_in_totals
+                          ? loginChargeTitle(acc.upcoming_charge_date, acc.upcoming_charge_to, acc.upcoming_charge_txns)
+                          : OUT_OF_TOTALS_TITLE}
                       >
-                        {chargeLabel(acc.upcoming_charge)} {fmtDay(acc.upcoming_charge_date)}: {ils(Math.abs(acc.upcoming_charge))}
+                        {chargeLabel(acc.upcoming_charge)} {rangeLabel(acc.upcoming_charge_date, acc.upcoming_charge_to)}: {ils(Math.abs(acc.upcoming_charge))}
                       </span>
                     )}
                   </div>
@@ -663,14 +684,18 @@ export default function AccountsPage() {
                                   <span className="text-gray-500 text-xs">· {s.txn_count} תנועות</span>
                                   {!s.included && <span className="text-amber-500/80 text-xs">(לא נכלל)</span>}
                                 </label>
+                                {/* A row always shows its own figure, even when it is
+                                    unticked — that is how you see what you are leaving
+                                    out — but greyed when it doesn't count. */}
                                 {s.balance != null && (
-                                  <span className={`font-mono text-sm ${s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                                  <span className={`font-mono text-sm ${!s.included || !acc.include_in_totals ? 'text-gray-500'
+                                    : s.balance < 0 ? 'text-red-400' : 'text-green-400'}`}>
                                     {ils(s.balance)}
                                   </span>
                                 )}
                                 {s.upcoming_charge != null && (
                                   <span
-                                    className="font-mono text-sm text-amber-300 whitespace-nowrap"
+                                    className={`font-mono text-sm whitespace-nowrap ${s.included && acc.include_in_totals ? 'text-amber-300' : 'text-gray-500'}`}
                                     title={chargeTitle(s.upcoming_charge_date, s.upcoming_charge_txns)}
                                   >
                                     {chargeLabel(s.upcoming_charge)} {fmtDay(s.upcoming_charge_date)}: {ils(Math.abs(s.upcoming_charge))}

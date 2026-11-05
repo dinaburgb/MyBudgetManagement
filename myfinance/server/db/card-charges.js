@@ -26,6 +26,15 @@ export const CARD_SOURCES = ['cal', 'isracard', 'max']
 
 const SRC = CARD_SOURCES.map(() => '?').join(',')
 
+/**
+ * SQL fragment: "this card number is not one the user unticked". Written out
+ * here rather than imported from subaccounts.js, which already imports this
+ * module. The arguments are code-controlled column names, never user input.
+ */
+const notExcluded = (idCol, numberCol) => `NOT EXISTS (
+    SELECT 1 FROM excluded_subaccounts x
+     WHERE x.account_id = ${idCol} AND x.account_number = ${numberCol})`
+
 /** 'YYYY-MM-DD' for today in local time. */
 export function todayYmd(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -37,30 +46,37 @@ function shape(row) {
 }
 
 /**
- * The next charge per card login. Returns a Map:
- *   account_id -> { amount, date, txns }
- * `amount` is positive when money leaves the account (a charge) and negative
- * when the net is in the user's favour (refunds exceed charges on that date).
- * Logins with nothing charged ahead are simply absent from the map.
+ * What each card login is about to be charged: every one of its cards' next
+ * charges added together. Returns a Map:
+ *   account_id -> { amount, from, to, cards, txns }
+ * `amount` is positive when money leaves the account and negative when refunds
+ * outweigh the charges. Logins with nothing coming up are absent from the map.
+ *
+ * Cards the user unticked in the breakdown are left out, so this figure means
+ * the same thing as the balance next to a bank login. Built from
+ * upcomingChargeByCard so the page adds up at every level: the total strip is
+ * the sum of these, and each of these is the sum of the card rows under it.
+ * When a login's cards sit on different charge dates `from` and `to` differ,
+ * and the page shows the range rather than a single date.
  */
 export function upcomingChargeByAccount(db = getDb(), today = todayYmd()) {
-  const rows = db.prepare(`
-    WITH next AS (
-      SELECT account_id, MIN(processed_date) AS charge_date
-      FROM transactions
-      WHERE source IN (${SRC}) AND account_id IS NOT NULL AND processed_date >= ?
-      GROUP BY account_id
-    )
-    SELECT t.account_id,
-           n.charge_date       AS charge_date,
-           SUM(t.amount)       AS total,
-           COUNT(*)            AS txns
-    FROM transactions t
-    JOIN next n ON n.account_id = t.account_id AND t.processed_date = n.charge_date
-    WHERE t.source IN (${SRC})
-    GROUP BY t.account_id
-  `).all(...CARD_SOURCES, today, ...CARD_SOURCES)
-  return new Map(rows.map(r => [r.account_id, shape(r)]))
+  const byAccount = new Map()
+  for (const card of upcomingChargeByCard(db, today)) {
+    if (!card.kept) continue
+    const acc = byAccount.get(card.account_id)
+    if (!acc) {
+      byAccount.set(card.account_id, {
+        amount: card.amount, from: card.date, to: card.date, cards: 1, txns: card.txns,
+      })
+      continue
+    }
+    acc.amount += card.amount
+    acc.txns   += card.txns
+    acc.cards  += 1
+    if (card.date < acc.from) acc.from = card.date
+    if (card.date > acc.to)   acc.to   = card.date
+  }
+  return byAccount
 }
 
 /**
@@ -91,13 +107,13 @@ export function upcomingChargeBySubAccount(db, accountId, today = todayYmd()) {
 }
 
 /**
- * Every card's next charge in one query, with whether that card counts toward
- * the app's totals. Returns [{ account_id, account_number, date, amount, included }].
- *
- * "Counts toward totals" is the same rule the rest of the app uses: the login
- * is marked `include_in_totals` AND the card number is not individually
- * excluded. The NOT EXISTS is written out here rather than imported from
- * subaccounts.js, which already imports this module.
+ * Every card's next charge in one query, with two inclusion flags:
+ *   kept     — the card number was not unticked in the breakdown. This is what
+ *              the login figure sums, because the login's own include_in_totals
+ *              is shown differently (greyed out) rather than by hiding it.
+ *   included — kept AND the login counts toward totals. This is what the
+ *              page-level total sums; the same rule the rest of the app uses.
+ * Returns [{ account_id, account_number, date, amount, txns, kept, included }].
  */
 export function upcomingChargeByCard(db = getDb(), today = todayYmd()) {
   return db.prepare(`
@@ -113,10 +129,10 @@ export function upcomingChargeByCard(db = getDb(), today = todayYmd()) {
            n.charge_date                      AS charge_date,
            SUM(t.amount)                      AS total,
            COUNT(*)                           AS txns,
+           CASE WHEN ${notExcluded('n.account_id', 'n.account_number')}
+                THEN 1 ELSE 0 END             AS kept,
            CASE WHEN a.include_in_totals = 1
-                 AND NOT EXISTS (SELECT 1 FROM excluded_subaccounts x
-                                  WHERE x.account_id = n.account_id
-                                    AND x.account_number = n.account_number)
+                 AND ${notExcluded('n.account_id', 'n.account_number')}
                 THEN 1 ELSE 0 END             AS included
     FROM next n
     JOIN accounts a ON a.id = n.account_id
@@ -130,6 +146,7 @@ export function upcomingChargeByCard(db = getDb(), today = todayYmd()) {
     account_id: r.account_id,
     account_number: r.account_number,
     ...shape(r),
+    kept: !!r.kept,
     included: !!r.included,
   }))
 }

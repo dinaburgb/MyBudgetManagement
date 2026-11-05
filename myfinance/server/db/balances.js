@@ -56,16 +56,25 @@ export function balanceHistory(db = getDb(), accountIds = null) {
 }
 
 /**
- * Total balance per account row (summing its account numbers, ignoring nulls),
- * with the most recent balance_date. Returns a Map: account_id -> { balance, balance_date, hasBalance }.
+ * Total balance per account row, with the most recent balance_date.
+ * Returns a Map: account_id -> { balance, balance_date }.
+ *
+ * Only account numbers that count toward totals are summed: a number the user
+ * unticked in the sub-account breakdown is left out, so the figure next to a
+ * login always means "the money that counts". A login whose numbers are all
+ * excluded is absent from the map (nothing counts -> no figure to show). The
+ * login's own include_in_totals is NOT applied here; the caller shows that
+ * state differently (greyed out) instead of hiding the number.
  */
 export function balancesByAccount(db = getDb()) {
+  const notExcluded = notExcludedSql('account_balances.account_id', 'account_balances.account_number')
   const rows = db.prepare(`
     SELECT account_id,
            SUM(balance)                       AS balance,
            MAX(balance_date)                  AS balance_date,
            SUM(CASE WHEN balance IS NOT NULL THEN 1 ELSE 0 END) AS withBalance
     FROM account_balances
+    WHERE ${notExcluded}
     GROUP BY account_id
   `).all()
   return new Map(rows.map(r => [r.account_id, {
