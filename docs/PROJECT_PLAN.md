@@ -544,6 +544,40 @@ Status of each bank / card integration:
     one that asserts the total equals the sum of the login figures. Full suite
     passing (189 total).
 
+- **MCP server — read-only access for AI assistants (2026-11-05):** a local MCP
+  server (`myfinance/server/mcp/`) lets Claude Desktop, Claude Code or Gemini CLI
+  answer questions over the real budget data in plain language. Setup, security
+  notes and troubleshooting: `docs/MCP_SETUP.md`.
+  - **Read-only by construction.** The SQLite file is opened with
+    `{ readOnly: true }` — SQLite itself refuses writes, not just the code — and
+    there is no tool that writes, deletes or syncs. `accounts.credentials` (the
+    encrypted bank logins) is never selected by any query, so an assistant
+    connected over MCP cannot reach the passwords.
+  - Eight tools: `list_accounts`, `upcoming_card_charges`, `net_balance`,
+    `monthly_summary`, `category_breakdown`, `search_transactions`,
+    `budget_status`, `insights`. All flagged `readOnlyHint: true`.
+  - `server/mcp/tools.js` holds the pure functions (each takes `db` explicitly)
+    and the shared `COUNTED` filter — the same "what counts" rule the dashboard
+    uses (only logins kept in the totals, minus excluded account numbers/cards,
+    no internal transfers, no excluded categories). A number answered over MCP
+    therefore reconciles with the number on screen; verified against real data:
+    net bank ₪24,644 and upcoming card charges ₪14,556 matched the Accounts page
+    exactly, including the ₪105 card left out.
+  - `server/mcp/server.js` is the MCP wrapper (zod input schemas, errors turned
+    into readable text). It must never print to stdout — that channel carries the
+    protocol; logs go to stderr.
+  - The `insights` payload is trimmed for an assistant (long tails cut, floats
+    rounded): 37.6 kB → 21.6 kB, so one call does not flood the context.
+  - The read-only connection takes `timeout: 5000`: the DB uses a rollback
+    journal (not WAL), so a reader is locked out while a bank sync writes.
+  - `DB_PATH` is now exported from `server/db/database.js` so the MCP server
+    opens the same file without duplicating the `MYFINANCE_DATA_DIR` logic.
+  - `.mcp.json` at the repo root wires the server up for Claude Code in this
+    project. ChatGPT is deliberately not supported: it only accepts remote HTTPS
+    MCP servers and rejects localhost, which would mean exposing the financial
+    data to the internet.
+  - Tests: `tests/test_mcp_tools.js` 15. Full suite passing (204 total).
+
 ## Next steps
 - Re-sync accounts to populate balances (banks only; cards have no balance)
 - Insights follow-ups: balance-over-time chart once `account_balance_history` has a few weeks of data; per-merchant "not fixed" override for the recurring list; net-worth trend when monthly asset snapshots accumulate

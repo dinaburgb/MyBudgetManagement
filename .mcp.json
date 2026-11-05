@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mybudget": {
+      "command": "node",
+      "args": ["myfinance/server/mcp/server.js"]
+    }
+  }
+}

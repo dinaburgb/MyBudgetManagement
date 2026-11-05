@@ -13,7 +13,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // MYFINANCE_DATA_DIR lets tests/demo runs point at a throwaway folder instead of
 // the real data/ (mirrors MYFINANCE_CRYPTO_DIR in crypto/encryption.js).
 const DATA_DIR  = process.env.MYFINANCE_DATA_DIR || path.join(__dirname, '..', '..', 'data')
-const DB_PATH   = path.join(DATA_DIR, 'myfinance.db')
+// Exported so read-only consumers (e.g. the MCP server) open the same file
+// without duplicating the MYFINANCE_DATA_DIR logic.
+export const DB_PATH = path.join(DATA_DIR, 'myfinance.db')
 const BACKUP_DIR = path.join(DATA_DIR, 'backups')
 
 let _db = null
