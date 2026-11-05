@@ -67,12 +67,17 @@ if (-not $ConfigPath) {
         $candidates += (Get-ChildItem $dataRoot -Directory -ErrorAction SilentlyContinue |
                         ForEach-Object { Join-Path $_.FullName 'claude_desktop_config.json' })
     }
-    $found = $candidates | Where-Object { Test-Path $_ } |
-             Sort-Object { (Get-Item $_).LastWriteTime } -Descending
-    if (-not $found) {
+    # @() matters: with exactly one match the pipeline returns a STRING, and
+    # $found[0] would then be its first CHARACTER ("C") instead of the path.
+    $found = @($candidates | Where-Object { Test-Path $_ } |
+               Sort-Object { (Get-Item $_).LastWriteTime } -Descending)
+    if ($found.Count -eq 0) {
         Fail ("claude_desktop_config.json not found. Open Claude Desktop ->`n" +
               "  Settings -> Developer -> Edit Config to see where it lives, then`n" +
               "  re-run this with -ConfigPath <that path>.")
+    }
+    if ($found.Count -gt 1) {
+        Info ("found $($found.Count) config files; using the most recently written one.")
     }
     $ConfigPath = $found[0]
 }
