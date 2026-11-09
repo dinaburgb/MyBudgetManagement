@@ -75,7 +75,7 @@ function normalFamily(db, { salary = 20000, rent = 6000, groceriesPerVisit = 300
   MONTHS.forEach((m, i) => {
     txns.push(txn(m, 'משכורת', salary, 'הכנסות', { day: 1 }))
     txns.push(txn(m, 'שכר דירה', -rent, 'חשבונות בית', { day: 2 }))
-    txns.push(txn(m, 'פלאפון 050-1234567', -(100 + i), 'תקשורת', { day: 5 }))   // slowly varying
+    txns.push(txn(m, 'פלאפון 050-1234567', -(100 + i), 'תקשורת ואפליקציות', { day: 5 }))   // slowly varying
     if (i % 2 === 0) txns.push(txn(m, 'מי אביבים 88', -400, 'חשבונות בית', { day: 6 }))  // bi-monthly
     for (let v = 0; v < visits; v++) txns.push(txn(m, `שופרסל דיל ${v}`, -groceriesPerVisit, 'מזון', { day: 3 + v }))
   })
@@ -334,7 +334,7 @@ test('drivers: amount and frequency, many-small vs few-large, over-budget rankin
   assert.strictEqual(home.overAvg, 0)
   assert.strictEqual(d.top[0].category, 'חשבונות בית')          // biggest by amount
   assert.deepStrictEqual(d.overBudget.map(c => c.category), ['מזון'])
-  const phone = d.categories.find(c => c.category === 'תקשורת')
+  const phone = d.categories.find(c => c.category === 'תקשורת ואפליקציות')
   assert.strictEqual(phone.budgetAvg, null)                       // never budgeted
 })
 
@@ -342,7 +342,7 @@ test('drivers: amount and frequency, many-small vs few-large, over-budget rankin
 test('budget realism: wishful, loose, realistic; income targets skipped', () => {
   const db = freshDb(); normalFamily(db)
   setBudget(db, 'מזון', 2500)               // spend 3,600 every month → wishful
-  setBudget(db, 'תקשורת', 500)              // spend ~100 → loose
+  setBudget(db, 'תקשורת ואפליקציות', 500)              // spend ~100 → loose
   setBudget(db, 'חשבונות בית', 6300)        // 6000 / 6400 alternating → over 3 of 6, median 6200 → realistic
   setBudget(db, 'הכנסות', 20000)            // income target, must be ignored
   const rows = windowRows(db, MONTHS)
@@ -351,8 +351,8 @@ test('budget realism: wishful, loose, realistic; income targets skipped', () => 
   assert.strictEqual(by['מזון'].verdict, 'wishful')
   assert.strictEqual(by['מזון'].monthsOver, 6)
   assert.strictEqual(by['מזון'].suggested, 3600)
-  assert.strictEqual(by['תקשורת'].verdict, 'loose')
-  assert.ok(by['תקשורת'].suggested < 500 && by['תקשורת'].suggested >= 100)
+  assert.strictEqual(by['תקשורת ואפליקציות'].verdict, 'loose')
+  assert.ok(by['תקשורת ואפליקציות'].suggested < 500 && by['תקשורת ואפליקציות'].suggested >= 100)
   assert.strictEqual(by['חשבונות בית'].verdict, 'realistic')
   assert.strictEqual(by['הכנסות'], undefined)
   assert.deepStrictEqual(r.summary, { wishful: 1, loose: 1, realistic: 1, planningGap: 3600 - 2500 })

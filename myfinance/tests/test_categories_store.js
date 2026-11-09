@@ -95,11 +95,11 @@ test('delete with a target moves data to that category, not אחר', () => {
   saveAccountTransactions(account, { accountNumber: '1', txns: [txn({ category: 'בידור' })] }, db)
   db.prepare(`INSERT INTO category_rules (keyword,category,priority) VALUES ('steam','בידור',0)`).run()
 
-  const res = deleteCategory(db, catId(db, 'בידור'), 'תקשורת')
+  const res = deleteCategory(db, catId(db, 'בידור'), 'תקשורת ואפליקציות')
 
-  assert.strictEqual(res.dest, 'תקשורת')
-  assert.strictEqual(db.prepare(`SELECT category FROM transactions`).get().category, 'תקשורת')
-  assert.strictEqual(db.prepare(`SELECT category FROM category_rules`).get().category, 'תקשורת')
+  assert.strictEqual(res.dest, 'תקשורת ואפליקציות')
+  assert.strictEqual(db.prepare(`SELECT category FROM transactions`).get().category, 'תקשורת ואפליקציות')
+  assert.strictEqual(db.prepare(`SELECT category FROM category_rules`).get().category, 'תקשורת ואפליקציות')
   assert.ok(!listCategoryNames(db).includes('בידור'))
 })
 

@@ -116,7 +116,7 @@ test('scraper Hebrew category is normalized to our canonical set', () => {
   ] }, db)
   const rows = db.prepare('SELECT category FROM transactions ORDER BY id').all()
   assert.strictEqual(rows[0].category, 'מזון')
-  assert.strictEqual(rows[1].category, 'תקשורת')
+  assert.strictEqual(rows[1].category, 'תקשורת ואפליקציות')
 })
 
 test('scraper-provided category is not overridden by rules', () => {

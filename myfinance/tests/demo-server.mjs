@@ -69,9 +69,9 @@ MONTHS.forEach((m, i) => {
   if (i % 2 === 1) bankTxns.push(t(m, 7, 'עיריית תל אביב - ארנונה', -1120, 'חשבונות בית'))
   if (!partial && m < '2026-07') bankTxns.push(t(m, 8, 'חוגים - מתנ"ס', -900, 'ילדים'))   // stops in summer
   // Fixed bills (card)
-  cardTxns.push(t(m, 4, 'פלאפון 054-1234567', -89, 'תקשורת'))
-  cardTxns.push(t(m, 4, 'סלקום 052-7654321', -79, 'תקשורת'))
-  cardTxns.push(t(m, 9, 'פרטנר אינטרנט', -99.9, 'תקשורת'))
+  cardTxns.push(t(m, 4, 'פלאפון 054-1234567', -89, 'תקשורת ואפליקציות'))
+  cardTxns.push(t(m, 4, 'סלקום 052-7654321', -79, 'תקשורת ואפליקציות'))
+  cardTxns.push(t(m, 9, 'פרטנר אינטרנט', -99.9, 'תקשורת ואפליקציות'))
   cardTxns.push(t(m, 11, 'הולמס פלייס', -249, 'בריאות'))
   if (m >= '2026-06') cardTxns.push(t(m, 12, 'NETFLIX.COM', -54.9, 'בידור'))              // new since June
   if (m <= '2026-06') cardTxns.push(t(m, 12, 'SPOTIFY', -29.9, 'בידור'))                  // gone after June
@@ -115,7 +115,7 @@ for (const a of [bank, card]) {
 }
 saveAccountTransactions(bank, { accountNumber: '100-200300', txns: bankTxns }, db)
 saveAccountTransactions(card, { accountNumber: '1234', txns: cardTxns }, db)
-for (const [cat, amt] of Object.entries({ 'מזון': 3000, 'רכב': 1500, 'קניות': 1200, 'מסעדות': 800, 'בידור': 400, 'חשבונות בית': 8000, 'תקשורת': 600, 'בריאות': 500, 'ילדים': 1000, 'ביטוח ופיננסים': 1100, 'הלוואות ומשכנתאות': 5800, 'הכנסות': 24000 })) {
+for (const [cat, amt] of Object.entries({ 'מזון': 3000, 'רכב': 1500, 'קניות': 1200, 'מסעדות': 800, 'בידור': 400, 'חשבונות בית': 8000, 'תקשורת ואפליקציות': 600, 'בריאות': 500, 'ילדים': 1000, 'ביטוח ופיננסים': 1100, 'הלוואות ומשכנתאות': 5800, 'הכנסות': 24000 })) {
   setBudget(db, cat, amt)
 }
 db.prepare(`INSERT INTO financial_assets (id, kind, category, institution, asset_type, label, owner, currency) VALUES (1, 'liability', 'הלוואות', 'בנק מזרחי', 'הלוואה', 'הלוואת רכב', 'Joint', 'ILS')`).run()
